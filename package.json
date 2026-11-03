@@ -1,0 +1,56 @@
+{
+  "name": "dsh-web-sub",
+  "version": "0.5.0",
+  "description": "Bind your chat.deepseek.com and gemini.google.com web sessions to use those models inside DSH. Local OpenAI-compatible bridge, one-click browser login, manual token/cookie paste.",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "deepseek",
+    "gemini",
+    "web-chat",
+    "subscription",
+    "plugin",
+    "openai-compatible"
+  ],
+  "author": "Vity",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "dsh-web-sub": "./bin/dsh-web-sub.mjs"
+  },
+  "files": [
+    "lib",
+    "bin",
+    "assets",
+    "locale/*.json",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "selftest": "node tests/selftest.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  }
+}

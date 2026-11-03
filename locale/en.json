@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Web Chat Subscription",
+    "description": "Bind your chat.deepseek.com and gemini.google.com sessions to use those models inside DSH."
+  }
+}

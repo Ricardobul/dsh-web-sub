@@ -1,0 +1,10 @@
+# dsh-web-sub bundle patch: mounts the plugin into a profile layer stack.
+# The row id is the key users override in their profile's cordis.patch.yml; the row
+# name is the module this package exports, so it must stay the package name.
+- insert:
+    - id: web-subscription
+      name: 'dsh-web-sub'
+
+# This plugin owns only web-session binding, token upkeep, and the
+# deepseek-web / gemini-web model routes served by its own local
+# OpenAI-compatible bridge (127.0.0.1:18431 by default).

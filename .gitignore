@@ -1,0 +1,21 @@
+# Logs & Cache
+node_modules/
+*.log
+npm-debug.log*
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Sensitive credentials & temporary tokens
+*token*.json
+*cookie*.json
+.env*
+temp/
+
+# Development artifacts
+_ref/
+dump.mjs
+scan-token.mjs
+scan2.mjs
+test_gemini_html.mjs
