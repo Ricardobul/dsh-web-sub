@@ -481,6 +481,19 @@ export function createBridge({ getAccount, wasmPath, log = () => {} }) {
       let inToolCall = false
       let streamedToolCalls = 0
 
+      // Keep-alive heartbeat: send ping comment and empty delta every 2500ms
+      // so DSH / fetch / proxies never hit idle timeout while the model is reasoning.
+      const heartbeat = setInterval(() => {
+        if (!res.writableEnded && !abort.signal.aborted) {
+          try {
+            res.write(': keep-alive\n\n')
+            chunk({})
+          } catch {
+            /* ignore write errors */
+          }
+        }
+      }, 2500)
+
       try {
         for await (const [kind, text] of deltas) {
           if (abort.signal.aborted || streamedToolCalls > 0) break
@@ -562,11 +575,14 @@ export function createBridge({ getAccount, wasmPath, log = () => {} }) {
           }
         }
       } catch (error) {
+        clearInterval(heartbeat)
         if (!abort.signal.aborted) {
           log(`[bridge] ${model.id} stream error: ${error.message}`)
           chunk({ content: produced ? `\n\n[stream error: ${error.message}]` : `Error: ${error.message}` })
         }
       }
+
+      clearInterval(heartbeat)
 
       if (!abort.signal.aborted && toolBuffer.length > 0) {
         if (inToolCall) {
@@ -739,7 +755,13 @@ async function openStream({ model, messages, tools, signal, getAccount, wasmPath
       try {
         yield* client.streamMessage(promptText, streamOpts)
       } catch (error) {
-        if (error?.kind === 'auth') {
+        const isRecoverable = error?.kind === 'auth'
+          || error?.status === 401
+          || error?.status === 403
+          || /auth|login|expired|snlm0e|no answer/i.test(error?.message ?? '')
+
+        if (isRecoverable) {
+          log(`[bridge] Gemini auto-recovery triggered: ${error.message}`)
           forgetGeminiClient(account.cookie)
           const freshCookie = await refreshSessionFromFirefox()
           if (freshCookie) {

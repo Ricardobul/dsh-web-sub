@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-sub",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Seamlessly bind your DeepSeek and Gemini web sessions to DeepSeek Harness (DSH). Features local OpenAI-compatible bridge, one-click browser login, and native visual QC audit engine for automated motion graphics verification.",
   "keywords": [
     "deepseek-harness",

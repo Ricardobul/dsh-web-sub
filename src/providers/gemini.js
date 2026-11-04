@@ -170,13 +170,18 @@ function openRequest(url, options = {}) {
       kill(error)
     }
 
-    const timer = setTimeout(() => {
-      kill(new Error(`no answer from ${target.host} within ${Math.round(timeoutMs / 1000)}s`))
-    }, timeoutMs)
-    timer.unref?.()
+    let timer = null
+    const armTimer = (ms) => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        kill(new Error(`no answer from ${target.host} within ${Math.round(ms / 1000)}s`))
+      }, ms)
+      timer.unref?.()
+    }
+    armTimer(timeoutMs)
 
     const cleanup = () => {
-      clearTimeout(timer)
+      if (timer) clearTimeout(timer)
       signal?.removeEventListener?.('abort', onAbort)
     }
 
@@ -195,6 +200,9 @@ function openRequest(url, options = {}) {
     request.on('response', (incoming) => {
       response = incoming
       settled = true
+      incoming.on('data', () => {
+        armTimer(timeoutMs)
+      })
       incoming.on('close', cleanup)
       incoming.on('end', cleanup)
       resolve(incoming)

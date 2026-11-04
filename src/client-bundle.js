@@ -590,7 +590,7 @@ module.exports = {
         h('div', { className: 'dws-header' },
           h('div', { className: 'dws-header-title-row' },
             h('h2', { className: 'dws-title' }, 'Web Chat Subscription'),
-            h('span', { className: 'dws-version-badge' }, 'v0.6.0'),
+            h('span', { className: 'dws-version-badge' }, 'v0.6.1'),
           ),
           h('p', { className: 'dws-desc' },
             'Conecte suas contas web do DeepSeek e Gemini como modelos nativos do DSH com bridge OpenAI local e auditoria visual embutida.'),
