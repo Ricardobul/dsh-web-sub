@@ -246,6 +246,57 @@ console.log('\n5. gemini model selection')
     unlisted.resolveModel('gemini-flash')?.modelId === FALLBACK_MODELS[0].modelId)
 }
 
+// ---------- 6. Co-Pilot engines: Sandbox DOM, Transactions & Visual QC ----------
+console.log('\n6. Co-Pilot engines (Sandbox DOM, Transactions & Safe-Area)')
+{
+  const { VirtualTimeline } = await load('timeline-sandbox.js')
+  const { TransactionManager } = await load('transactions.js')
+  const { auditKeyframeSafeAreas } = await load('visual-qc.js')
+
+  // VirtualTimeline simulation
+  const timeline = new VirtualTimeline({ durationSeconds: 60 })
+  const validBatch = [
+    { operacao: 'criar_trilha', argumentos: { id: 'v1', type: 'video' } },
+    { operacao: 'adicionar_clipe', argumentos: { trackId: 'v1', startTime: 0, duration: 5 } },
+    { operacao: 'adicionar_clipe', argumentos: { trackId: 'v1', startTime: 5, duration: 5 } },
+  ]
+  const simResult = timeline.simulate(validBatch)
+  check('sandbox approves valid non-overlapping batch', simResult.ok === true && simResult.errors.length === 0)
+
+  const collisionBatch = [
+    { operacao: 'criar_trilha', argumentos: { id: 'v2', type: 'video' } },
+    { operacao: 'adicionar_clipe', argumentos: { trackId: 'v2', startTime: 2, duration: 6 } },
+    { operacao: 'adicionar_clipe', argumentos: { trackId: 'v2', startTime: 4, duration: 4 } }, // Overlaps [2, 8]
+  ]
+  const collisionResult = timeline.simulate(collisionBatch)
+  check('sandbox rejects track collision deterministically',
+    collisionResult.ok === false && collisionResult.errors.some((e) => e.includes('collision')))
+
+  // TransactionManager ACID rollback
+  const txManager = new TransactionManager()
+  let dummyState = { version: 1, clips: ['a', 'b'] }
+  const tx = txManager.begin('test_mutation', dummyState)
+  dummyState = { version: 2, clips: ['a', 'b', 'c_broken'] } // corrupted
+  const rollbackResult = txManager.rollback(tx.id, 'Asset missing')
+  check('rollback restores pre-transaction snapshot',
+    rollbackResult.ok && rollbackResult.restoredState.version === 1 && rollbackResult.restoredState.clips.length === 2)
+  check('transaction status reflects ROLLED_BACK', rollbackResult.status === 'ROLLED_BACK')
+
+  // Safe-Area 9:16 bounding box audit
+  const safeBoxes = [
+    { text: 'Centered Title', x: 200, y: 300, width: 680, height: 80 }, // Inside [100, 980] x [180, 1680]
+  ]
+  const safeCheck = auditKeyframeSafeAreas({ boxes: safeBoxes, resolution: { width: 1080, height: 1920 } })
+  check('safe-area audit passes elements within 880px column', safeCheck.passed === true)
+
+  const outsideBoxes = [
+    { text: 'Top Cutoff Header', x: 50, y: 100, width: 300, height: 50 }, // y < 180 and x < 100
+  ]
+  const cutCheck = auditKeyframeSafeAreas({ boxes: outsideBoxes, resolution: { width: 1080, height: 1920 } })
+  check('safe-area audit flags elements in danger zones',
+    cutCheck.passed === false && cutCheck.violations.length >= 2)
+}
+
 console.log('')
 if (failures === 0) {
   console.log('all checks passed')
