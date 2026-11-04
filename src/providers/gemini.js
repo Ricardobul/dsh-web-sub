@@ -762,6 +762,8 @@ export class GeminiWebClient {
     }
 
     if (!emitted) {
+      this.lastCid = ''
+      this.lastRid = ''
       throw new GeminiWebError('Gemini returned no text (the request shape may have changed)', { kind: 'protocol' })
     }
   }

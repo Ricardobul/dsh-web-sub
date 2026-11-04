@@ -756,9 +756,10 @@ async function openStream({ model, messages, tools, signal, getAccount, wasmPath
         yield* client.streamMessage(promptText, streamOpts)
       } catch (error) {
         const isRecoverable = error?.kind === 'auth'
+          || error?.kind === 'protocol'
           || error?.status === 401
           || error?.status === 403
-          || /auth|login|expired|snlm0e|no answer/i.test(error?.message ?? '')
+          || /auth|login|expired|snlm0e|no answer|no text|shape|protocol|abort/i.test(error?.message ?? '')
 
         if (isRecoverable) {
           log(`[bridge] Gemini auto-recovery triggered: ${error.message}`)
