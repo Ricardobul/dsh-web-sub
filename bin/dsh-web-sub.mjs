@@ -27,6 +27,7 @@ const { readAccounts, setAccount, removeAccount, maskAccount, readBindFlag, writ
   await load('store.js')
 const { startBridge, DEFAULT_PORT } = await load('server.js')
 const { captureFromDefaultBrowser, captureFromChromium, findChromiumBrowser, defaultBrowser } = await load('browser-login.js')
+const { auditVideo, checkVisualQcStatus } = await load('visual-qc.js')
 
 const PROVIDERS = ['deepseek-web', 'gemini-web']
 
@@ -45,6 +46,10 @@ function usage() {
   unbind <provider>           forget a provider
   serve                       run the OpenAI-compatible bridge
   chat <model> "<prompt>"     send one message through the bridge
+  audit <file> [flags]        run visual QC on a video (safe-area, OCR, format)
+        --ratio <9:16|16:9>       target aspect ratio (default: 9:16)
+        --safeArea <pixels>       central safe column in px (default: 880)
+  qc                          check visual QC engine readiness (watch-skill)
 
 providers: ${PROVIDERS.join(', ')}
 models: deepseek-web-chat, deepseek-web-think, gemini-web, gemini-web-think
@@ -360,6 +365,36 @@ try {
       }
       process.stdout.write('\n')
       await bridge.close()
+      break
+    }
+
+    case 'audit': {
+      const videoPath = rest[0]
+      if (!videoPath) {
+        console.error('usage: dsh-web-sub audit <video.mp4> [--ratio 9:16] [--safeArea 880]')
+        process.exitCode = 1
+        break
+      }
+      const parsed = flags(process.argv.slice(3))
+      const ratio = typeof parsed.ratio === 'string' ? parsed.ratio : '9:16'
+      const safeArea = Number(parsed.safeArea) || 880
+      console.log(`[visual-qc] Auditing "${videoPath}" (target: ${ratio}, safe area: ${safeArea}px)...`)
+      const report = await auditVideo({
+        videoPath,
+        aspectRatio: ratio,
+        safeAreaColumnPx: safeArea,
+        log: (m) => console.log(m),
+      })
+      console.log('\n--- QC REPORT ---')
+      console.log(JSON.stringify(report, null, 2))
+      if (!report.approved) process.exitCode = 2
+      break
+    }
+
+    case 'qc': {
+      const status = await checkVisualQcStatus()
+      console.log('\n--- VISUAL QC ENGINE STATUS ---')
+      console.log(JSON.stringify(status, null, 2))
       break
     }
 

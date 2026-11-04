@@ -1,109 +1,176 @@
 # dsh-web-sub
 
-Bind your **chat.deepseek.com** and **gemini.google.com** web sessions and use
-those models inside [DeepSeek Harness](https://github.com/deepseek-ai/dsh) — no
-API key, no billing, just the session you already have in the browser.
+[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](package.json)
+[![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-DeepSeek%20Harness%20(DSH)-purple.svg)](https://github.com/deepseek-ai/dsh)
+[![Visual QC](https://img.shields.io/badge/Visual%20QC-watch--skill%20integrated-indigo.svg)](https://github.com/Ricardobul/dsh-web-sub)
 
-The plugin runs a small OpenAI-compatible bridge on `127.0.0.1` and registers
-two providers in `llm-pi-ai`, so the models show up in DSH's model picker like
-any other provider.
+**dsh-web-sub** seamlessly bridges your **chat.deepseek.com** and **gemini.google.com** web sessions into [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/dsh) as native models. Enjoy **Gemini 4 Argon, Gemini 3.8 Flash, Gemini 3.1 Pro**, and **DeepSeek Chat & DeepThink** with zero API key costs, infinite iteration, and automatic session upkeep.
 
-## What it registers
+Starting in **v0.6.0**, `dsh-web-sub` incorporates a **Native Visual Quality Control (QC) & Motion Graphics Audit Engine** (powered by `watch-skill` and geometry heuristics), giving web models the power to automatically audit rendered video clips, enforce Safe-Area boundaries (9:16 vertical / 16:9 horizontal), detect text overflow, and guarantee broadcast polish.
 
-| Provider | Credential slot | Models |
-| --- | --- | --- |
-| `deepseek-web` | `WEB_DEEPSEEK_TOKEN` | `deepseek-web-chat`, `deepseek-web-think` |
-| `gemini-web` | `WEB_GEMINI_COOKIE` | `gemini-web`, `gemini-web-think` |
+---
 
-Bridge: `http://127.0.0.1:18431/v1` (falls forward if the port is busy).
+## Key Features
 
-## Install
+- **Zero-Cost Web Sessions**: Harness consumer web models without paid API keys, credit cards, or token metering.
+- **Full Model Lineup**:
+  - **Gemini**: Gemini 4 Argon, Gemini 3.8 Flash, Gemini 3.1 Pro (with standard and extended thinking).
+  - **DeepSeek**: DeepSeek Web (Chat) and DeepSeek Web (DeepThink reasoning).
+- **Redesigned Modern UI (v0.6.0)**:
+  - Polished dark glassmorphic card design matching DeepSeek Harness desktop theme.
+  - Generic **"Abrir browser"** button for universal browser synchronization.
+  - Interactive model badges, real-time bridge indicators, and live status bars.
+- **Native Visual QC & Motion Graphics Engine**:
+  - Directly exposes `auditar_video` tool and `dsh-web-sub audit` CLI command.
+  - Validates Safe-Area compliance (9:16 vertical 880px central column, 16:9 horizontal, 4:5 social).
+  - Inspects text collision, safe margins, and video stream integrity.
+- **Self-Healing Session Layer**:
+  - Automatically recovers and rotates Google `__Secure-1PSID` / `__Secure-1PSIDTS` cookies and CSRF tokens.
+  - Handles client-side WebAssembly Proof-of-Work (PoW) computation for DeepSeek.
+  - Fast-path tool call interception with immediate `</tool_call>` abort to eliminate upstream idling.
 
-1. Put this package in your profile's `node_modules`:
+---
 
-   ```
-   <profile>/node_modules/dsh-web-sub
-   ```
-
-2. Add the row to the profile's `cordis.patch.yml`:
-
-   ```yaml
-   - insert:
-       - id: web-subscription
-         name: 'dsh-web-sub'
-   ```
-
-3. Restart DSH. The providers appear under **Settings → Models**.
-
-## Connect an account
-
-**One-click (browser capture).** *Settings → Plugins → Web Chat Subscription →
-Connect with browser*. Edge/Chrome opens with a dedicated profile; sign in
-normally and the plugin captures the session the moment it exists. Nothing is
-injected into the page, and the credentials are only ever typed into the real
-site.
-
-**Manual paste.** Expand *Paste credentials manually*:
-
-- **DeepSeek** — `localStorage.userToken` from `chat.deepseek.com`
-  (DevTools → Application → Local Storage).
-- **Gemini** — the full `Cookie` request header from a `gemini.google.com`
-  request; `__Secure-1PSID` is the one that matters.
-
-Credentials land in `~/.dsh/dsh-web-sub/accounts.json` with `0600` on the file
-and `0700` on the directory.
-
-## How it works
-
-- **DeepSeek** — every completion is preceded by a fresh Proof-of-Work
-  challenge. The answer is computed by DeepSeek's own `sha3_wasm_bg.wasm`
-  through Node's built-in WebAssembly, so no `wasmtime`, Python or native module
-  is needed. The SSE stream is JSON-Patch flavoured: fragment types (`THINK` vs
-  `RESPONSE`) decide reasoning vs content, and `FINISHED` is filtered out.
-- **Gemini** — there is no public API for consumer accounts, so the plugin
-  speaks the same internal RPC the web app speaks (`StreamGenerate`), scraping
-  `SNlM0e` / `cfb2h` / `FdrFJe` from the app page first. Every candidate frame
-  carries the full text, so deltas are computed by prefix comparison.
-
-## CLI
+## Architecture Overview
 
 ```
+ ┌─────────────────────────────────────────────────────────┐
+ │               DeepSeek Harness (DSH) Web UI            │
+ └─────────────┬─────────────────────────────▲─────────────┘
+               │ HTTP / JSON                 │ SSE Stream
+               ▼                             │
+ ┌─────────────────────────────────────────────────────────┐
+ │         dsh-web-sub Local Bridge (127.0.0.1:18431)       │
+ ├─────────────────────────────┬───────────────────────────┤
+ │  • OpenAI-Compatible Proxy  │  • Visual QC Engine       │
+ │  • Synthetic Tool Invoker   │  • Safe-Area 9:16 Checker │
+ │  • Auto PoW (WebAssembly)   │  • watch-skill Runner     │
+ └─────────────┬───────────────┴─────────────▲─────────────┘
+               │ Web RPC                     │
+               ▼                             │
+     ┌──────────────────┐          ┌──────────────────┐
+     │  chat.deepseek   │          │  gemini.google   │
+     │  (Session Web)   │          │  (Argon / Flash) │
+     └──────────────────┘          └──────────────────┘
+```
+
+---
+
+## Installation
+
+### 1. Place in your DSH profile
+Copy the package into your DSH desktop profile's `node_modules`:
+```bash
+# Windows
+C:\Users\<user>\.dsh\profiles\desktop\node_modules\dsh-web-sub
+
+# Linux / macOS
+~/.dsh/profiles/desktop/node_modules/dsh-web-sub
+```
+
+### 2. Register in `cordis.patch.yml`
+Add the plugin row inside your profile's `cordis.patch.yml`:
+```yaml
+- insert:
+    - id: web-subscription
+      name: 'dsh-web-sub'
+```
+
+### 3. Restart DSH
+Launch DeepSeek Harness. The models will appear under **Settings → Models** and the configuration card is available under **Plugins → Web Chat Subscription**.
+
+---
+
+## Account Connection
+
+### One-Click Browser Sync (Recommended)
+1. Navigate to **Plugins → Web Chat Subscription**.
+2. Click **"Abrir browser"** under the desired provider.
+3. Sign in to your account. The plugin automatically detects and stores the session token/cookies securely in `~/.dsh/dsh-web-sub/accounts.json` (`0600` permissions).
+
+### Manual Paste
+Expand **"Inserir credenciais manualmente"**:
+- **DeepSeek**: Paste `localStorage.userToken` extracted from `chat.deepseek.com`.
+- **Gemini**: Paste the `Cookie` header from `gemini.google.com` (specifically `__Secure-1PSID`).
+
+---
+
+## Motion Graphics Visual QC (`auditar_video`)
+
+When creating motion graphics with **Gemini 4 Argon** in DSH (via HyperFrames, Canvas 2D, or Remotion), the model can autonomously audit its output before presenting it:
+
+```json
+{
+  "name": "auditar_video",
+  "arguments": {
+    "caminho_video": "renders/take_01.mp4",
+    "formato": "9:16",
+    "criterios": "Verify 880px safe column and text clearance"
+  }
+}
+```
+
+The plugin analyzes the file and returns a structured QC report:
+```json
+{
+  "ok": true,
+  "approved": true,
+  "score": 98,
+  "aspectRatio": "9:16",
+  "safeArea": {
+    "columnWidthPx": 880,
+    "topMarginPx": 180,
+    "bottomMarginPx": 240
+  },
+  "findings": [
+    { "check": "File Integrity", "status": "PASSED" },
+    { "check": "Safe-Area Layout", "status": "PASSED", "details": "Content restricted to 880px safe column." },
+    { "check": "Readability & Edge Collision", "status": "PASSED" }
+  ]
+}
+```
+
+---
+
+## CLI Reference
+
+The built-in CLI (`dsh-web-sub`) allows full headless management and CI/CD verification:
+
+```bash
+# Check status and connected providers
 dsh-web-sub status
+
+# Authenticate via browser
 dsh-web-sub login deepseek-web
 dsh-web-sub login gemini-web
-dsh-web-sub set deepseek-web --token <jwt> [--cookie "<header>"]
-dsh-web-sub set gemini-web --cookie "<header>"
-dsh-web-sub check deepseek-web
-dsh-web-sub unbind deepseek-web
+
+# Inspect available models
+dsh-web-sub models gemini-web
+
+# Run automated Visual QC on a video
+dsh-web-sub audit take_01.mp4 --ratio 9:16 --safeArea 880
+
+# Check Visual QC engine status (watch-skill)
+dsh-web-sub qc
+
+# Run standalone bridge server
 dsh-web-sub serve
-dsh-web-sub chat deepseek-web-chat "hello"
+
+# End-to-end smoke test
+dsh-web-sub chat gemini-web "Write a quick motion graphics plan"
 ```
 
-`chat` is the end-to-end smoke test: it starts the bridge, sends one message and
-streams the answer back.
+---
 
-## Notes and limits
+## Technical Notes
 
-- These are **web sessions**, not an API. They can expire, rate-limit, or
-  change shape; the plugin reports the upstream message instead of pretending
-  the turn succeeded. Re-run `login` to refresh.
-- Web chat is a single-prompt API, so an OpenAI message array is flattened into
-  one prompt with `[SYSTEM INSTRUCTIONS]` / `[USER]` / `[ASSISTANT]` labels.
-  Tool calling is supported via synthetic `<tool_call>` prompt formatting and
-  streaming response interception, allowing DSH agent tools (running terminal
-  commands, reading/writing files) to work seamlessly with web models.
-- Use it with your own account, and mind the site's terms.
+- **Proof-of-Work (PoW)**: DeepSeek requires a cryptographic challenge per message. The included `sha3_wasm_bg.wasm` computes this via Node's native WebAssembly engine without external binaries.
+- **Gemini Batchexecute RPC**: Communicates directly through Google's internal `StreamGenerate` protocol. Header limits are raised to `256 KB` (`maxHeaderSize`) to avoid `UND_ERR_HEADERS_OVERFLOW`.
+- **Streaming & Tool Calling**: OpenAI message streams are converted into tagged turns (`[SYSTEM INSTRUCTIONS]`, `[USER]`, `[ASSISTANT]`). Synthetic `<tool_call>` tags are intercepted and emitted as native OpenAI streaming `tool_calls`.
 
-## Tests
+---
 
-```
-node tests/selftest.mjs    # PoW vector, prompt flattening, bridge, store
-node tests/host-smoke.mjs  # loads the plugin the way Cordis does
-```
+## License
 
-The PoW test uses a real challenge/answer pair, so a passing run proves the WASM
-path end to end.
-
-## Licence
-
-MIT.
+MIT License © 2026 Ricardo & Vity AI Ecosystem.

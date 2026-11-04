@@ -1,7 +1,7 @@
 {
   "name": "dsh-web-sub",
-  "version": "0.5.0",
-  "description": "Bind your chat.deepseek.com and gemini.google.com web sessions to use those models inside DSH. Local OpenAI-compatible bridge, one-click browser login, manual token/cookie paste.",
+  "version": "0.6.0",
+  "description": "Seamlessly bind your DeepSeek and Gemini web sessions to DeepSeek Harness (DSH). Features local OpenAI-compatible bridge, one-click browser login, and native visual QC audit engine for automated motion graphics verification.",
   "keywords": [
     "deepseek-harness",
     "dsh",
@@ -10,7 +10,10 @@
     "web-chat",
     "subscription",
     "plugin",
-    "openai-compatible"
+    "openai-compatible",
+    "visual-qc",
+    "motion-graphics",
+    "watch-skill"
   ],
   "author": "Vity",
   "license": "MIT",
