@@ -17,6 +17,7 @@ import fs from 'node:fs'
 import { join } from 'node:path'
 import { DeepSeekWebClient, promptFromMessages as deepseekPrompt } from './providers/deepseek.js'
 import { GeminiWebClient, promptFromMessages as geminiPrompt } from './providers/gemini.js'
+import { ChatGPTWebClient, CHATGPT_MODELS } from './providers/chatgpt.js'
 import { captureFromFirefox } from './firefox.js'
 import { setAccount } from './store.js'
 import { auditVideo } from './visual-qc.js'
@@ -106,6 +107,42 @@ export const MODEL_CATALOGUE = [
     thinking: true,
     reasoningEfforts: REASONING_EFFORTS,
   },
+  {
+    id: 'gpt-5.6-luna',
+    name: 'GPT-5.6 Luna (ChatGPT Subscription)',
+    provider: 'openai-codex',
+    contextWindow: 272000,
+    maxTokens: 128000,
+    thinking: true,
+    reasoningEfforts: REASONING_EFFORTS,
+  },
+  {
+    id: 'gpt-6-luna',
+    name: 'GPT-6 Luna (ChatGPT Subscription)',
+    provider: 'openai-codex',
+    contextWindow: 272000,
+    maxTokens: 128000,
+    thinking: true,
+    reasoningEfforts: REASONING_EFFORTS,
+  },
+  {
+    id: 'gpt-5.6-sol',
+    name: 'GPT-5.6 Sol (ChatGPT Subscription)',
+    provider: 'openai-codex',
+    contextWindow: 272000,
+    maxTokens: 128000,
+    thinking: true,
+    reasoningEfforts: REASONING_EFFORTS,
+  },
+  {
+    id: 'gpt-6-astra',
+    name: 'GPT-6 Astra (ChatGPT Subscription)',
+    provider: 'openai-codex',
+    contextWindow: 272000,
+    maxTokens: 128000,
+    thinking: true,
+    reasoningEfforts: REASONING_EFFORTS,
+  },
 ]
 
 /**
@@ -146,7 +183,10 @@ export function catalogueFor(account) {
   // Extended thinking used to be a separate model id; it is now the `high`
   // level of every Gemini model, so the picker carries one row per model
   // instead of a duplicate labelled "(Extended Thinking)".
-  return [...MODEL_CATALOGUE.filter((model) => model.provider === 'deepseek-web'), ...gemini]
+  return [
+    ...MODEL_CATALOGUE.filter((model) => model.provider === 'deepseek-web' || model.provider === 'openai-codex'),
+    ...gemini,
+  ]
 }
 
 /** `Gemini 4 Argon` -> `gemini-4-argon`. */
@@ -179,6 +219,14 @@ export function resolveModel(requested, catalogue = MODEL_CATALOGUE) {
   if (id.startsWith('deepseek')) {
     return catalogue.find((model) => model.id === (id.includes('think') || id.includes('r1') ? 'deepseek-web-think' : 'deepseek-web-chat')) ?? catalogue[0]
   }
+  if (id.startsWith('chatgpt') || id.startsWith('gpt-') || id.startsWith('o1') || id.startsWith('o3')) {
+    const codexModels = catalogue.filter((model) => model.provider === 'openai-codex')
+    if (codexModels.length === 0) return catalogue[0]
+    if (id.includes('astra')) return codexModels.find((m) => m.id === 'gpt-6-astra') ?? codexModels[0]
+    if (id.includes('sol')) return codexModels.find((m) => m.id === 'gpt-5.6-sol') ?? codexModels[0]
+    if (id.includes('6') || id.includes('o1')) return codexModels.find((m) => m.id === 'gpt-6-luna') ?? codexModels[0]
+    return codexModels[0]
+  }
   return catalogue[0]
 }
 
@@ -208,6 +256,101 @@ export function extendedThinkingFor(body) {
 }
 
 /**
+ * Sanitize and repair malformed JSON emitted by LLMs.
+ * Fixes unescaped Windows backslashes (D:\...), raw newlines in strings, and trailing commas.
+ *
+ * @param {string} raw
+ * @returns {string}
+ */
+export function sanitizeJsonString(raw) {
+  let str = String(raw ?? '').trim()
+  if (str.startsWith('```')) {
+    str = str.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/, '').trim()
+  }
+  str = str.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+
+  // 1. Fix unescaped Windows backslashes / invalid escapes in JSON.
+  // In JSON, valid escapes are \", \\, \/, \b, \f, \n, \r, \t, \uXXXX.
+  // Any other backslash is doubled so it parses as a literal backslash.
+  str = str.replace(/\\(?:[^"\\/bfnrtu]|u(?![\da-fA-F]{4}))/g, (match) => {
+    return '\\\\' + match.slice(1)
+  })
+
+  // 2. Fix unescaped control chars (like raw newlines/tabs) inside double quotes.
+  let inQuote = false
+  let isEsc = false
+  let res = ''
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i]
+    if (isEsc) {
+      res += c
+      isEsc = false
+      continue
+    }
+    if (c === '\\') {
+      res += c
+      isEsc = true
+      continue
+    }
+    if (c === '"') {
+      inQuote = !inQuote
+      res += c
+      continue
+    }
+    if (inQuote) {
+      if (c === '\n') { res += '\\n'; continue }
+      if (c === '\r') { res += '\\r'; continue }
+      if (c === '\t') { res += '\\t'; continue }
+    }
+    res += c
+  }
+  str = res
+
+  // 3. Remove trailing commas before closing braces/brackets
+  str = str.replace(/,\s*([}\]])/g, '$1')
+
+  return str
+}
+
+/**
+ * Fallback regex extractor for tool calls when strict JSON parsing fails completely.
+ * Extracts the tool name and best-effort arguments object so raw JSON is never leaked to the user.
+ *
+ * @param {string} raw
+ * @returns {{name: string, arguments: string} | null}
+ */
+export function extractFallbackToolCall(raw) {
+  const text = String(raw ?? '').trim()
+  const nameMatch = text.match(/(?:"name"|"tool")\s*:\s*"([^"]+)"/i)
+  if (!nameMatch) return null
+
+  const name = nameMatch[1].trim()
+
+  // Check if command parameter exists (common in shell / bash tools)
+  const cmdMatch = text.match(/(?:"command"|"cmd"|"script")\s*:\s*"([\s\S]*?)"\s*(?:,|\})/i)
+  if (cmdMatch) {
+    return {
+      name,
+      arguments: JSON.stringify({ command: cmdMatch[1] }),
+    }
+  }
+
+  // Check if arguments is a nested object
+  const argsObjMatch = text.match(/(?:"arguments"|"args"|"parameters")\s*:\s*(\{[\s\S]*\})/i)
+  if (argsObjMatch) {
+    const sanitizedArgs = sanitizeJsonString(argsObjMatch[1])
+    try {
+      JSON.parse(sanitizedArgs)
+      return { name, arguments: sanitizedArgs }
+    } catch {
+      return { name, arguments: JSON.stringify({ raw: argsObjMatch[1] }) }
+    }
+  }
+
+  return { name, arguments: '{}' }
+}
+
+/**
  * Safely parse a JSON string from a <tool_call> block.
  * Supports raw JSON, markdown-wrapped JSON, and handles single objects or arrays.
  *
@@ -226,9 +369,8 @@ export function parseToolCallJson(raw) {
       return JSON.parse(str)
     } catch {
       try {
-        // Strip trailing commas before closing braces/brackets
-        const relaxed = str.replace(/,\s*([}\]])/g, '$1')
-        return JSON.parse(relaxed)
+        const sanitized = sanitizeJsonString(str)
+        return JSON.parse(sanitized)
       } catch {
         return null
       }
@@ -243,7 +385,10 @@ export function parseToolCallJson(raw) {
     }
   }
 
-  if (!obj) return null
+  if (!obj) {
+    const fallback = extractFallbackToolCall(cleaned)
+    return fallback ? [fallback] : null
+  }
 
   try {
     const items = Array.isArray(obj) ? obj : [obj]
@@ -261,7 +406,8 @@ export function parseToolCallJson(raw) {
     }
     return results.length > 0 ? results : null
   } catch {
-    return null
+    const fallback = extractFallbackToolCall(cleaned)
+    return fallback ? [fallback] : null
   }
 }
 
@@ -977,6 +1123,17 @@ async function openStream({ model, messages, tools, signal, getAccount, wasmPath
     }
 
     return streamWithAutoRecovery()
+  }
+
+  if (model.provider === 'openai-codex') {
+    const client = new ChatGPTWebClient()
+    return client.streamMessage({
+      model: model.id,
+      messages,
+      tools,
+      signal,
+      thinking: extendedThinking,
+    })
   }
 
   throw new Error(`unknown provider for model ${model.id}`)

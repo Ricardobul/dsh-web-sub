@@ -1,13 +1,17 @@
 # dsh-web-sub
 
-[![Version](https://img.shields.io/badge/version-0.7.3-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-0.8.0-blue.svg)](package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-DeepSeek%20Harness%20(DSH)-purple.svg)](https://github.com/deepseek-ai/dsh)
+[![Platform](https://img.shields.io/badge/platform-DeepSeek%20Harness%20(DSH)%20%7C%20OpenCode-purple.svg)](https://github.com/deepseek-ai/dsh)
+[![ChatGPT](https://img.shields.io/badge/ChatGPT-Codex%20OAuth%20integrated-10a37f.svg)](https://chatgpt.com)
 [![Visual QC](https://img.shields.io/badge/Visual%20QC-watch--skill%20integrated-indigo.svg)](https://github.com/Ricardobul/dsh-web-sub)
 
-**dsh-web-sub** seamlessly bridges your **chat.deepseek.com** and **gemini.google.com** web sessions into [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/dsh) as native models. Enjoy **Gemini 4 Argon, Gemini 3.8 Flash, Gemini 3.1 Pro**, and **DeepSeek Chat & DeepThink** with zero API key costs, infinite iteration, and automatic session upkeep.
+**dsh-web-sub** seamlessly bridges your **Gemini**, **ChatGPT**, and **DeepSeek** web subscriptions into [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/dsh) and [OpenCode Desktop](https://opencode.ai) as native models. Enjoy **GPT-5.6 Luna, GPT-6 Luna, GPT-6 Astra, Gemini 4 Argon, Gemini 3.8 Flash**, and **DeepSeek Chat & DeepThink** with zero API key costs, infinite iteration, and automatic session upkeep.
 
-Starting in **v0.6.0**, `dsh-web-sub` incorporates a **Native Visual Quality Control (QC) & Motion Graphics Audit Engine** (powered by `watch-skill` and geometry heuristics), giving web models the power to automatically audit rendered video clips, enforce Safe-Area boundaries (9:16 vertical / 16:9 horizontal), detect text overflow, and guarantee broadcast polish.
+Starting in **v0.8.0**, `dsh-web-sub` introduces:
+- **First-Class ChatGPT Subscription Support**: Connects directly to the official ChatGPT Codex subscription backend via OAuth 2.0 PKCE (`~/.codex/auth.json` or `dsh-web-sub login chatgpt`), giving you access to OpenAI's flagship models (`gpt-5.6-luna`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-6-astra`).
+- **Resilient JSON Tool Call Sanitizer**: Automatically cleans and repairs unescaped Windows paths (`D:\...`), invalid JSON escapes, literal linebreaks in arguments, and trailing commas emitted by LLMs, eliminating tool call leaks in chat.
+- **Universal Multi-Host Compatibility**: Fully supports both **DeepSeek Harness (DSH)** via Cordis RPC routes and **OpenCode Desktop / Claude Code** via the local OpenAI-compatible bridge on `http://127.0.0.1:18431/v1`.
 
 ---
 
@@ -15,9 +19,14 @@ Starting in **v0.6.0**, `dsh-web-sub` incorporates a **Native Visual Quality Con
 
 - **Zero-Cost Web Sessions**: Harness consumer web models without paid API keys, credit cards, or token metering.
 - **Full Model Lineup**:
+  - **ChatGPT**: GPT-5.6 Luna, GPT-6 Luna, GPT-5.6 Sol, GPT-6 Astra, GPT-5.3 Codex Spark (with reasoning and native tool streaming).
   - **Gemini**: Gemini 4 Argon, Gemini 3.8 Flash, Gemini 3.1 Pro (with standard and extended thinking).
   - **DeepSeek**: DeepSeek Web (Chat) and DeepSeek Web (DeepThink reasoning).
-- **Redesigned Modern UI (v0.6.0)**:
+- **Bulletproof Tool Execution**:
+  - Intercepts synthetic `<tool_call>` tags and raw JSON tool calls.
+  - Sanitizes invalid escapes and Windows file paths in shell commands before JSON parsing.
+  - Inoculates models against API key hunting and refusal filters.
+- **Redesigned Modern UI**:
   - Polished dark glassmorphic card design matching DeepSeek Harness desktop theme.
   - Generic **"Abrir browser"** button for universal browser synchronization.
   - Interactive model badges, real-time bridge indicators, and live status bars.
@@ -26,9 +35,9 @@ Starting in **v0.6.0**, `dsh-web-sub` incorporates a **Native Visual Quality Con
   - Validates Safe-Area compliance (9:16 vertical 880px central column, 16:9 horizontal, 4:5 social).
   - Inspects text collision, safe margins, and video stream integrity.
 - **Self-Healing Session Layer**:
+  - Automatic PKCE OAuth token refresh for ChatGPT via `auth.openai.com`.
   - Automatically recovers and rotates Google `__Secure-1PSID` / `__Secure-1PSIDTS` cookies and CSRF tokens.
   - Handles client-side WebAssembly Proof-of-Work (PoW) computation for DeepSeek.
-  - Fast-path tool call interception with immediate `</tool_call>` abort to eliminate upstream idling.
 
 ---
 

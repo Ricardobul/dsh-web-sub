@@ -28,15 +28,16 @@ const { readAccounts, setAccount, removeAccount, maskAccount, readBindFlag, writ
 const { startBridge, DEFAULT_PORT } = await load('server.js')
 const { captureFromDefaultBrowser, captureFromChromium, findChromiumBrowser, defaultBrowser } = await load('browser-login.js')
 const { auditVideo, checkVisualQcStatus } = await load('visual-qc.js')
+const { ChatGPTWebClient, readCodexAuth, writeCodexAuth, CODEX_OAUTH_CLIENT_ID } = await load(join('providers', 'chatgpt.js'))
 
-const PROVIDERS = ['deepseek-web', 'gemini-web']
+const PROVIDERS = ['deepseek-web', 'gemini-web', 'chatgpt']
 
 function usage() {
-  console.log(`dsh-web-sub — bind chat.deepseek.com / gemini.google.com to DSH
+  console.log(`dsh-web-sub — bind chat.deepseek.com / gemini.google.com / chatgpt.com to DSH
 
   status                      show what is connected
   browser                     show which browser will be used
-  login <provider>            open a browser and wait for sign-in
+  login <provider>            open a browser and wait for sign-in (or OAuth PKCE for chatgpt)
   set <provider> [flags]      paste credentials manually
         --token <jwt>             DeepSeek userToken
         --cookie "<header>"       Cookie header from the site
@@ -52,7 +53,7 @@ function usage() {
   qc                          check visual QC engine readiness (watch-skill)
 
 providers: ${PROVIDERS.join(', ')}
-models: deepseek-web-chat, deepseek-web-think, gemini-web, gemini-web-think
+models: deepseek-web-chat, deepseek-web-think, gemini-web, gemini-web-think, gpt-5.6-luna, gpt-6-luna, gpt-5.6-sol, gpt-6-astra
 data dir: ${STORE_DIR}`)
 }
 
@@ -89,6 +90,22 @@ function describeStatus() {
   console.log(`browser  : ${browserInfo}`)
   console.log(`flag     : ${JSON.stringify(readBindFlag())}`)
   for (const provider of PROVIDERS) {
+    if (provider === 'chatgpt') {
+      const auth = readCodexAuth()
+      console.log(`\n${provider}`)
+      if (!auth.accessToken && !auth.refreshToken) {
+        console.log('  status  : NOT CONNECTED (run `dsh-web-sub login chatgpt` or ensure ~/.codex/auth.json exists)')
+      } else {
+        const mask = (t) => (t && t.length > 12 ? `${t.slice(0, 4)}…${t.slice(-4)}` : '****')
+        console.log(`  status  : connected (via ${auth.filePath})`)
+        console.log(`  plan    : ${auth.planType || 'chatgpt'}`)
+        if (auth.email) console.log(`  account : ${auth.email}`)
+        console.log(`  token   : ${mask(auth.accessToken)}`)
+        if (auth.expiresAt) console.log(`  expires : ${new Date(auth.expiresAt).toLocaleString()}`)
+      }
+      continue
+    }
+
     const account = accounts[provider]
     console.log(`\n${provider}`)
     if (account === undefined) {
@@ -104,6 +121,20 @@ function describeStatus() {
 }
 
 async function validate(provider, credential) {
+  if (provider === 'chatgpt' || provider === 'openai-codex') {
+    const client = new ChatGPTWebClient()
+    const check = await client.checkLogin()
+    return {
+      ok: check.ok,
+      message: check.ok ? `logged in (plan: ${check.planType}, account: ${check.accountId})` : check.message,
+      models: [
+        { displayName: 'GPT-5.6 Luna', modelName: 'gpt-5.6-luna', modelId: 'gpt-5.6-luna' },
+        { displayName: 'GPT-6 Luna', modelName: 'gpt-6-luna', modelId: 'gpt-6-luna' },
+        { displayName: 'GPT-5.6 Sol', modelName: 'gpt-5.6-sol', modelId: 'gpt-5.6-sol' },
+        { displayName: 'GPT-6 Astra', modelName: 'gpt-6-astra', modelId: 'gpt-6-astra' },
+      ],
+    }
+  }
   if (provider === 'deepseek-web') {
     const { DeepSeekWebClient } = await load(join('providers', 'deepseek.js'))
     const client = new DeepSeekWebClient({ token: credential.token, cookie: credential.cookie ?? '', wasmPath: WASM_PATH })
@@ -157,11 +188,113 @@ try {
 
     case 'login': {
       const provider = rest[0]
-      if (!PROVIDERS.includes(provider)) {
+      const parsedFlags = flags(rest.slice(1))
+      if (!PROVIDERS.includes(provider) && provider !== 'openai-codex') {
         console.error(`unknown provider "${provider}" — use one of: ${PROVIDERS.join(', ')}`)
         process.exitCode = 1
         break
       }
+
+      if (provider === 'chatgpt' || provider === 'openai-codex') {
+        const auth = readCodexAuth()
+        if (auth.accessToken && !parsedFlags.force) {
+          const client = new ChatGPTWebClient()
+          const check = await client.checkLogin()
+          if (check.ok) {
+            console.log(`ChatGPT is already connected via ~/.codex/auth.json (Plan: ${check.planType}, Account: ${check.accountId}).`)
+            console.log('Use `dsh-web-sub login chatgpt --force` to re-authenticate with a different account.')
+            break
+          }
+        }
+
+        console.log('Initiating ChatGPT OAuth PKCE login...')
+        const { createHash, randomBytes } = await import('node:crypto')
+        const { createServer } = await import('node:http')
+        const { spawn } = await import('node:child_process')
+
+        const verifier = randomBytes(32).toString('base64url')
+        const challenge = createHash('sha256').update(verifier).digest('base64url')
+        const state = randomBytes(16).toString('base64url')
+        const port = 1455
+
+        const authUrl = `https://auth.openai.com/oauth/authorize?client_id=${CODEX_OAUTH_CLIENT_ID}&response_type=code&scope=openid+profile+email+offline_access&redirect_uri=http%3A%2F%2Flocalhost%3A${port}%2Fauth%2Fcallback&code_challenge=${challenge}&code_challenge_method=S256&state=${state}`
+
+        console.log(`\nPlease authenticate in your browser:`)
+        console.log(authUrl)
+
+        try {
+          if (process.platform === 'win32') {
+            spawn('cmd.exe', ['/c', 'start', '', authUrl], { detached: true, stdio: 'ignore' })
+          } else if (process.platform === 'darwin') {
+            spawn('open', [authUrl], { detached: true, stdio: 'ignore' })
+          } else {
+            spawn('xdg-open', [authUrl], { detached: true, stdio: 'ignore' })
+          }
+        } catch {}
+
+        const server = createServer(async (req, res) => {
+          const u = new URL(req.url, `http://localhost:${port}`)
+          if (u.pathname !== '/auth/callback') {
+            res.writeHead(404)
+            res.end('Not found')
+            return
+          }
+
+          const code = u.searchParams.get('code')
+          const retState = u.searchParams.get('state')
+
+          if (!code || retState !== state) {
+            res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' })
+            res.end('<h2>Authorization failed or state mismatch.</h2>')
+            return
+          }
+
+          try {
+            const tokenRes = await fetch('https://auth.openai.com/oauth/token', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                client_id: CODEX_OAUTH_CLIENT_ID,
+                grant_type: 'authorization_code',
+                code,
+                code_verifier: verifier,
+                redirect_uri: `http://localhost:${port}/auth/callback`,
+              }),
+            })
+
+            if (!tokenRes.ok) {
+              const err = await tokenRes.text()
+              res.writeHead(500, { 'content-type': 'text/html; charset=utf-8' })
+              res.end(`<h2>Token exchange failed</h2><pre>${err}</pre>`)
+              return
+            }
+
+            const tokenData = await tokenRes.json()
+            writeCodexAuth(auth.filePath, tokenData.access_token, tokenData.refresh_token)
+
+            res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+            res.end('<h2>Success! Connected to ChatGPT Codex.</h2><p>You can close this tab and return to the terminal.</p>')
+
+            console.log('\nChatGPT OAuth login successful! Credentials saved.')
+            server.close()
+          } catch (err) {
+            res.writeHead(500, { 'content-type': 'text/html; charset=utf-8' })
+            res.end(`<h2>Error</h2><p>${err.message}</p>`)
+            console.error('OAuth exchange error:', err)
+          }
+        })
+
+        server.listen(port, '127.0.0.1', () => {
+          console.log(`\nWaiting for browser callback on http://127.0.0.1:${port}/auth/callback (5 min timeout)...`)
+        })
+
+        setTimeout(() => {
+          server.close()
+        }, 5 * 60 * 1000)
+
+        break
+      }
+
       const preferred = defaultBrowser()
       if (preferred !== null) {
         console.log(`default browser: ${preferred.kind}${preferred.chromium ? ' (Chromium, launching with DevTools)' : ' (Firefox, reading profile)'}`)
@@ -248,8 +381,8 @@ try {
         process.exitCode = 1
         break
       }
-      const account = readAccounts()[provider]
-      if (account === undefined) {
+      const account = readAccounts()[provider] || (provider === 'chatgpt' || provider === 'openai-codex' ? readCodexAuth() : undefined)
+      if (account === undefined || (provider === 'chatgpt' && !account.accessToken && !account.refreshToken)) {
         console.error(`${provider} is not connected`)
         process.exitCode = 1
         break
@@ -278,8 +411,8 @@ try {
         process.exitCode = 1
         break
       }
-      const account = readAccounts()[provider]
-      if (account === undefined) {
+      const account = readAccounts()[provider] || (provider === 'chatgpt' || provider === 'openai-codex' ? readCodexAuth() : undefined)
+      if (account === undefined || (provider === 'chatgpt' && !account.accessToken && !account.refreshToken)) {
         console.error(`${provider} is not connected`)
         process.exitCode = 1
         break

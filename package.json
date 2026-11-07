@@ -1,16 +1,19 @@
 {
   "name": "dsh-web-sub",
-  "version": "0.7.3",
-  "description": "Seamlessly bind your DeepSeek and Gemini web sessions to DeepSeek Harness (DSH). Features local OpenAI-compatible bridge, one-click browser login, and 4-pillar Co-Pilot engine for visual pair editing, DOM sandbox simulation, active watch-skill QC, and atomic rollback transactions.",
+  "version": "0.8.0",
+  "description": "Seamlessly bind your Gemini, ChatGPT and DeepSeek web subscriptions to DeepSeek Harness (DSH) and OpenCode Desktop. Features local OpenAI-compatible bridge, PKCE OAuth for ChatGPT, resilient JSON tool call repair, and 4-pillar Co-Pilot engine for visual pair editing, DOM sandbox simulation, active watch-skill QC, and atomic rollback transactions.",
   "keywords": [
     "deepseek-harness",
     "dsh",
+    "chatgpt",
+    "openai-codex",
     "deepseek",
     "gemini",
     "web-chat",
     "subscription",
     "plugin",
     "openai-compatible",
+    "opencode",
     "visual-qc",
     "motion-graphics",
     "watch-skill"

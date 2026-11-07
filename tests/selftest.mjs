@@ -202,6 +202,20 @@ const extractedRawJson = parseSyntheticToolCalls(rawJsonText)
 check('parseSyntheticToolCalls intercepts raw JSON tool call with relaxed syntax',
   extractedRawJson.toolCalls.length === 1 && extractedRawJson.toolCalls[0].function.name === 'shell' && !extractedRawJson.cleanContent.includes('shell'))
 
+// Test sample with invalid JSON escapes / Windows paths from real user interaction
+const windowsPathJson = '{"name": "shell", "arguments": {"command": "python -c \\"save(\'D:\\producao de video\\locucao.mp3\')\\""}}'
+const parsedWindowsPath = parseToolCallJson(windowsPathJson)
+check('parseToolCallJson sanitizes invalid backslashes in Windows paths',
+  parsedWindowsPath?.[0]?.name === 'shell' && JSON.parse(parsedWindowsPath[0].arguments).command.includes('producao de video'))
+
+// Test multiline raw string inside tool arguments
+const multilineToolJson = `{"name": "shell", "arguments": {"command": "python -c \\"import asyncio
+import edge_tts
+print('ok')\\""}}`
+const parsedMultiline = parseToolCallJson(multilineToolJson)
+check('parseToolCallJson repairs unescaped newlines in argument strings',
+  parsedMultiline?.[0]?.name === 'shell' && parsedMultiline[0].arguments.includes('import edge_tts'))
+
 // ---------- 3d. middleware engine ----------
 const { MiddlewareEngine } = await load('middleware.js')
 console.log('\n3d. middleware engine')
@@ -316,6 +330,51 @@ console.log('\n6. Co-Pilot engines (Sandbox DOM, Transactions & Safe-Area)')
   const cutCheck = auditKeyframeSafeAreas({ boxes: outsideBoxes, resolution: { width: 1080, height: 1920 } })
   check('safe-area audit flags elements in danger zones',
     cutCheck.passed === false && cutCheck.violations.length >= 2)
+}
+
+// ---------- 7. ChatGPT / OpenAI Codex Subscription ----------
+console.log('\n7. chatgpt / openai codex subscription')
+{
+  const { ChatGPTWebClient, CHATGPT_MODELS, decodeJwtPayload } = await load(join('providers', 'chatgpt.js'))
+  check('chatgpt models are registered in catalogue', CHATGPT_MODELS.length >= 4)
+  check('gpt-5.6-luna is default flagship codex model', CHATGPT_MODELS.some((m) => m.id === 'gpt-5.6-luna'))
+
+  const client = new ChatGPTWebClient()
+  const payload = client.formatPayload([
+    { role: 'system', content: 'You are helpful' },
+    { role: 'user', content: 'What is the weather?' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'c1', function: { name: 'getWeather', arguments: '{"city":"Tokyo"}' } }] },
+    { role: 'tool', tool_call_id: 'c1', content: 'Rainy, 18C' },
+  ], [
+    {
+      type: 'function',
+      function: {
+        name: 'getWeather',
+        description: 'Get weather',
+        parameters: { type: 'object', properties: { city: { type: 'string' } } },
+      },
+    },
+  ])
+
+  check('payload input formats function_call and function_call_output',
+    payload.input.some((i) => i.type === 'function_call' && i.name === 'getWeather') &&
+    payload.input.some((i) => i.type === 'function_call_output' && i.call_id === 'c1'))
+  check('payload tools formats parameters correctly',
+    payload.tools.length === 1 && payload.tools[0].name === 'getWeather')
+
+  // Model resolution checks
+  const { resolveModel: resolveTestModel } = await load('server.js')
+  check('resolveModel resolves chatgpt to gpt-5.6-luna', resolveTestModel('chatgpt')?.id === 'gpt-5.6-luna')
+  check('resolveModel resolves gpt-4o to gpt-5.6-luna', resolveTestModel('gpt-4o')?.id === 'gpt-5.6-luna')
+  check('resolveModel resolves o1 to gpt-6-luna', resolveTestModel('o1')?.id === 'gpt-6-luna')
+  check('resolveModel resolves gpt-6-astra directly', resolveTestModel('gpt-6-astra')?.id === 'gpt-6-astra')
+
+  // JWT decode test
+  const fakePayload = { sub: 'user_123', email: 'test@example.com', exp: 1890000000 }
+  const fakeJwt = `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify(fakePayload)).toString('base64url')}.sig`
+  const decodedPayload = decodeJwtPayload(fakeJwt)
+  check('decodeJwtPayload extracts email and exp without verification',
+    decodedPayload?.email === 'test@example.com' && decodedPayload?.exp === 1890000000)
 }
 
 console.log('')
