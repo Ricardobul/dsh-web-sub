@@ -1,6 +1,6 @@
 # dsh-web-sub
 
-[![Version](https://img.shields.io/badge/version-0.6.1-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-0.7.3-blue.svg)](package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-DeepSeek%20Harness%20(DSH)-purple.svg)](https://github.com/deepseek-ai/dsh)
 [![Visual QC](https://img.shields.io/badge/Visual%20QC-watch--skill%20integrated-indigo.svg)](https://github.com/Ricardobul/dsh-web-sub)
@@ -168,6 +168,53 @@ dsh-web-sub chat gemini-web "Write a quick motion graphics plan"
 - **Proof-of-Work (PoW)**: DeepSeek requires a cryptographic challenge per message. The included `sha3_wasm_bg.wasm` computes this via Node's native WebAssembly engine without external binaries.
 - **Gemini Batchexecute RPC**: Communicates directly through Google's internal `StreamGenerate` protocol. Header limits are raised to `256 KB` (`maxHeaderSize`) to avoid `UND_ERR_HEADERS_OVERFLOW`.
 - **Streaming & Tool Calling**: OpenAI message streams are converted into tagged turns (`[SYSTEM INSTRUCTIONS]`, `[USER]`, `[ASSISTANT]`). Synthetic `<tool_call>` tags are intercepted and emitted as native OpenAI streaming `tool_calls`.
+
+---
+
+## Extensible Middleware & Hooks Architecture
+
+`dsh-web-sub` includes a zero-dependency, pluggable middleware engine allowing developers to hook into the request/response pipeline. You can inject custom prompt grounding, integrate local intent routers (such as ONNX classifiers, Ollama, or local SLMs), or build fast-path execution layers without modifying the core repository.
+
+### Creating a Custom Middleware
+Place a `middleware.mjs` (or `.js`) file in your data directory (`~/.dsh/dsh-web-sub/middleware.mjs`) or set the `DSH_WEB_SUB_MIDDLEWARE` environment variable:
+
+```javascript
+// ~/.dsh/dsh-web-sub/middleware.mjs
+
+/**
+ * Intercept and enrich requests before they are sent upstream.
+ */
+export async function onRequest({ model, messages, tools, stream, body }) {
+  // Example: Inject custom project guidance or task constraints
+  const lastMessage = messages[messages.length - 1];
+  
+  // Fast-path: Return an immediate answer or pre-computed tool call
+  // if (shouldHandleLocally(lastMessage)) {
+  //   return { handled: true, response: { choices: [{ message: { role: 'assistant', content: 'Local response' } }] } };
+  // }
+
+  return { messages, tools };
+}
+
+/**
+ * Post-process completions or tool calls before returning to the client.
+ */
+export async function onResponse({ model, content, toolCalls, reasoning }) {
+  // Example: Audit or log responses
+  return { content, toolCalls };
+}
+```
+
+---
+
+## Universal OpenAI Tool Calling & Agentic Recovery
+
+Starting in **v0.7.3**, `dsh-web-sub` features an enterprise-grade synthetic tool-calling engine designed for coding agents (**OpenCode Desktop**, **DeepSeek Harness**, **Claude Code**, **Cursor**, etc.):
+
+- **Universal Interception**: Intercepts both `<tool_call>` XML blocks and raw JSON function invocations (`{"name": "...", "arguments": ...}`) across both streaming (SSE) and non-streaming requests.
+- **Auto-Healing Parser**: Tolerates trailing commas, unescaped whitespace, markdown codeblock wraps, and raw single objects or arrays.
+- **Anti-Refusal Inoculation**: Directs web models to operate with local agent tools without hallucinating requirements for external cloud API keys (e.g. `GEMINI_API_KEY`).
+- **Error Recovery Loop**: When client agents return execution errors or invalid tool arguments, hints are automatically appended to prompt the model to self-correct rather than giving up with canned refusals.
 
 ---
 

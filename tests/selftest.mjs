@@ -197,6 +197,27 @@ const extractedUnclosed = parseSyntheticToolCalls(unclosedText)
 check('parseSyntheticToolCalls handles unclosed tool call tags at end of text',
   extractedUnclosed.toolCalls.length === 1 && extractedUnclosed.toolCalls[0].function.name === 'exec')
 
+const rawJsonText = 'Vou rodar o comando agora:\n{"name": "shell", "arguments": {"command": "echo hi",}}\nPronto.'
+const extractedRawJson = parseSyntheticToolCalls(rawJsonText)
+check('parseSyntheticToolCalls intercepts raw JSON tool call with relaxed syntax',
+  extractedRawJson.toolCalls.length === 1 && extractedRawJson.toolCalls[0].function.name === 'shell' && !extractedRawJson.cleanContent.includes('shell'))
+
+// ---------- 3d. middleware engine ----------
+const { MiddlewareEngine } = await load('middleware.js')
+console.log('\n3d. middleware engine')
+const engine = new MiddlewareEngine(tmpdir())
+check('middleware initializes cleanly with no custom file', engine.initialized === false)
+const reqCtx = await engine.onRequest({ model: { id: 'test' }, messages: [{ role: 'user', content: 'hi' }], tools: [] })
+check('onRequest passes through transparently when no middleware registered', reqCtx.messages[0].content === 'hi')
+
+// Check tool error hint in prompt
+const { promptFromMessages: geminiPromptFn } = await load(join('providers', 'gemini.js'))
+const promptWithError = geminiPromptFn([
+  { role: 'user', content: 'run tool' },
+  { role: 'tool', name: 'execute', content: 'Invalid arguments for tool "execute"' },
+])
+check('tool errors append guidance hint to prompt', promptWithError.includes('Note: The tool reported an error'))
+
 // ---------- 4. store ----------
 console.log('\n4. account store')
 const temp = mkdtempSync(join(tmpdir(), 'dsh-web-sub-'))

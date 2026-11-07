@@ -307,6 +307,7 @@ try {
         preferredPort: Number(process.env.DSH_WEB_SUB_PORT) || DEFAULT_PORT,
         getAccount: (provider) => readAccounts()[provider] ?? null,
         wasmPath: WASM_PATH,
+        dataDir: STORE_DIR,
         log: (message) => console.log(`[bridge] ${message}`),
       })
       console.log(`listening on http://127.0.0.1:${bridge.port}/v1`)
@@ -326,6 +327,7 @@ try {
         preferredPort: Number(process.env.DSH_WEB_SUB_PORT) || DEFAULT_PORT,
         getAccount: (provider) => readAccounts()[provider] ?? null,
         wasmPath: WASM_PATH,
+        dataDir: STORE_DIR,
         log: (message) => console.error(`[bridge] ${message}`),
       })
       const response = await fetch(`http://127.0.0.1:${bridge.port}/v1/chat/completions`, {

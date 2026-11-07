@@ -13,11 +13,14 @@
  * @module dsh-web-sub/server
  */
 import { createServer } from 'node:http'
+import fs from 'node:fs'
+import { join } from 'node:path'
 import { DeepSeekWebClient, promptFromMessages as deepseekPrompt } from './providers/deepseek.js'
 import { GeminiWebClient, promptFromMessages as geminiPrompt } from './providers/gemini.js'
 import { captureFromFirefox } from './firefox.js'
 import { setAccount } from './store.js'
 import { auditVideo } from './visual-qc.js'
+import { MiddlewareEngine } from './middleware.js'
 
 export const BUILTIN_AUDIT_TOOL = {
   type: 'function',
@@ -216,8 +219,33 @@ export function parseToolCallJson(raw) {
   if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/, '').trim()
   }
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+
+  function tryParse(str) {
+    try {
+      return JSON.parse(str)
+    } catch {
+      try {
+        // Strip trailing commas before closing braces/brackets
+        const relaxed = str.replace(/,\s*([}\]])/g, '$1')
+        return JSON.parse(relaxed)
+      } catch {
+        return null
+      }
+    }
+  }
+
+  let obj = tryParse(cleaned)
+  if (!obj) {
+    const extracted = extractFirstJsonObject(cleaned, 0)
+    if (extracted && extracted.end !== -1) {
+      obj = tryParse(extracted.json)
+    }
+  }
+
+  if (!obj) return null
+
   try {
-    const obj = JSON.parse(cleaned)
     const items = Array.isArray(obj) ? obj : [obj]
     const results = []
     for (const item of items) {
@@ -238,7 +266,63 @@ export function parseToolCallJson(raw) {
 }
 
 /**
- * Extract all synthetic <tool_call> blocks from a completion text.
+ * Extract the boundaries and substring of the first balanced JSON object.
+ *
+ * @param {string} str
+ * @param {number} startIndex
+ * @returns {{start: number, end: number, json: string} | null}
+ */
+export function extractFirstJsonObject(str, startIndex = 0) {
+  const openIndex = str.indexOf('{', startIndex)
+  if (openIndex === -1) return null
+
+  let depth = 0
+  let inString = false
+  let isEscaped = false
+
+  for (let i = openIndex; i < str.length; i++) {
+    const char = str[i]
+
+    if (isEscaped) {
+      isEscaped = false
+      continue
+    }
+
+    if (char === '\\') {
+      isEscaped = true
+      continue
+    }
+
+    if (char === '"') {
+      inString = !inString
+      continue
+    }
+
+    if (!inString) {
+      if (char === '{') {
+        depth++
+      } else if (char === '}') {
+        depth--
+        if (depth === 0) {
+          return {
+            start: openIndex,
+            end: i + 1,
+            json: str.slice(openIndex, i + 1),
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    start: openIndex,
+    end: -1,
+    json: str.slice(openIndex),
+  }
+}
+
+/**
+ * Extract all synthetic <tool_call> blocks or raw JSON tool calls from a completion text.
  * Returns the text with tool calls removed (cleanContent) and the parsed tool_calls.
  *
  * @param {string} text
@@ -268,9 +352,49 @@ export function parseSyntheticToolCalls(text) {
     }
   }
 
-  const cleanContent = toolCalls.length > 0
+  let cleanContent = toolCalls.length > 0
     ? text.replace(/<tool_call>[\s\S]*?(?:<\/tool_call>|$)/gi, '').trim()
     : text
+
+  // Fallback: If no <tool_call> tags were used, check for raw JSON tool calls
+  if (toolCalls.length === 0) {
+    let searchPos = 0
+    while (searchPos < cleanContent.length) {
+      const sub = cleanContent.slice(searchPos)
+      const rawMatch = sub.match(/(?:```(?:json)?\s*)?\{\s*"(?:name|tool|function|tool_call)"\s*:/i)
+      if (!rawMatch) break
+
+      const triggerIndex = searchPos + rawMatch.index
+      const obj = extractFirstJsonObject(cleanContent, triggerIndex)
+      if (!obj || obj.end === -1) break
+
+      const parsedList = parseToolCallJson(obj.json)
+      if (parsedList && parsedList.length > 0) {
+        for (const parsed of parsedList) {
+          toolCalls.push({
+            index: index++,
+            id: `call_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`,
+            type: 'function',
+            function: {
+              name: parsed.name,
+              arguments: parsed.arguments,
+            },
+          })
+        }
+        let cutStart = triggerIndex
+        let cutEnd = obj.end
+        const after = cleanContent.slice(cutEnd)
+        const mdCloseMatch = after.match(/^\s*```/)
+        if (mdCloseMatch) {
+          cutEnd += mdCloseMatch[0].length
+        }
+        cleanContent = (cleanContent.slice(0, cutStart) + cleanContent.slice(cutEnd)).trim()
+        searchPos = cutStart
+      } else {
+        searchPos = triggerIndex + 1
+      }
+    }
+  }
 
   return { cleanContent, toolCalls }
 }
@@ -303,7 +427,10 @@ async function readJson(req, limitBytes = 32 * 1024 * 1024) {
  *   log?: (message: string) => void,
  * }} options
  */
-export function createBridge({ getAccount, wasmPath, log = () => {} }) {
+export function createBridge({ getAccount, wasmPath, dataDir, log = () => {} }) {
+  const resolvedDataDir = dataDir || process.env.DSH_WEB_SUB_DATA_DIR || join(process.env.USERPROFILE || process.env.HOME || '.', '.dsh', 'dsh-web-sub')
+  const middlewareEngine = new MiddlewareEngine(resolvedDataDir)
+
   const server = createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://127.0.0.1')
     const cors = {
@@ -362,11 +489,31 @@ export function createBridge({ getAccount, wasmPath, log = () => {} }) {
       const stream = body.stream !== false
       const created = Math.floor(Date.now() / 1000)
       const id = completionId()
-      const requestedTools = Array.isArray(body.tools) ? [...body.tools] : []
-      if (requestedTools.length > 0 && !requestedTools.some((t) => (t.function?.name || t.name) === 'auditar_video')) {
+      const rawTools = Array.isArray(body.tools)
+        ? body.tools
+        : (Array.isArray(body.functions) ? body.functions.map((f) => ({ type: 'function', function: f })) : [])
+      const requestedTools = [...rawTools]
+      if (process.env.DSH_ENABLE_BUILTIN_TOOLS === 'true' && requestedTools.length > 0 && !requestedTools.some((t) => (t.function?.name || t.name) === 'auditar_video')) {
         requestedTools.push(BUILTIN_AUDIT_TOOL)
       }
-      const hasTools = requestedTools.length > 0
+
+      // Extensible middleware hook: allows custom prompt grounding, local routers, or fast-path responses
+      const middlewareContext = await middlewareEngine.onRequest({
+        model,
+        messages: body.messages ?? [],
+        tools: requestedTools,
+        stream,
+        body,
+      })
+
+      if (middlewareContext?.handled && middlewareContext.response) {
+        res.writeHead(200, { 'content-type': 'application/json', ...cors })
+        res.end(JSON.stringify(middlewareContext.response))
+        return
+      }
+
+      const effectiveMessages = middlewareContext?.messages ?? body.messages ?? []
+      const effectiveTools = middlewareContext?.tools ?? requestedTools
 
       const abort = new AbortController()
       req.on('close', () => abort.abort())
@@ -375,8 +522,8 @@ export function createBridge({ getAccount, wasmPath, log = () => {} }) {
       try {
         deltas = await openStream({
           model,
-          messages: body.messages ?? [],
-          tools: requestedTools,
+          messages: effectiveMessages,
+          tools: effectiveTools,
           signal: abort.signal,
           getAccount,
           wasmPath,
@@ -435,13 +582,20 @@ export function createBridge({ getAccount, wasmPath, log = () => {} }) {
           if (content === '' && reasoning === '') content = `Error: ${error.message}`
         }
 
-        const { cleanContent, toolCalls } = hasTools
-          ? parseSyntheticToolCalls(content)
-          : { cleanContent: content, toolCalls: [] }
-        const finishReason = toolCalls.length > 0 ? 'tool_calls' : 'stop'
-        const message = { role: 'assistant', content: cleanContent || (toolCalls.length > 0 ? null : '') }
+        const { cleanContent, toolCalls } = parseSyntheticToolCalls(content)
+        const hookResult = await middlewareEngine.onResponse({
+          model,
+          content: cleanContent,
+          toolCalls,
+          reasoning,
+        })
+
+        const finalContent = hookResult?.content !== undefined ? hookResult.content : cleanContent
+        const finalToolCalls = hookResult?.toolCalls !== undefined ? hookResult.toolCalls : toolCalls
+        const finishReason = finalToolCalls.length > 0 ? 'tool_calls' : 'stop'
+        const message = { role: 'assistant', content: finalContent || (finalToolCalls.length > 0 ? null : '') }
         if (reasoning !== '') message.reasoning_content = reasoning
-        if (toolCalls.length > 0) message.tool_calls = toolCalls
+        if (finalToolCalls.length > 0) message.tool_calls = finalToolCalls
 
         res.writeHead(200, { 'content-type': 'application/json', ...cors })
         res.end(JSON.stringify({
@@ -479,7 +633,26 @@ export function createBridge({ getAccount, wasmPath, log = () => {} }) {
       let produced = false
       let toolBuffer = ''
       let inToolCall = false
+      let inRawJsonCall = false
       let streamedToolCalls = 0
+
+      const emitToolCalls = (parsedCalls) => {
+        for (const call of parsedCalls) {
+          chunk({
+            tool_calls: [
+              {
+                index: streamedToolCalls++,
+                id: `call_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`,
+                type: 'function',
+                function: {
+                  name: call.name,
+                  arguments: call.arguments,
+                },
+              },
+            ],
+          })
+        }
+      }
 
       // Keep-alive heartbeat: send ping comment and empty delta every 2500ms
       // so DSH / fetch / proxies never hit idle timeout while the model is reasoning.
@@ -503,41 +676,9 @@ export function createBridge({ getAccount, wasmPath, log = () => {} }) {
             continue
           }
 
-          if (!hasTools) {
-            chunk({ content: text })
-            continue
-          }
-
           toolBuffer += text
 
           while (toolBuffer.length > 0) {
-            if (!inToolCall) {
-              const startIndex = toolBuffer.indexOf('<tool_call>')
-              if (startIndex === -1) {
-                // Check if a partial '<tool_call>' is forming at the end
-                const partialMatch = toolBuffer.match(/<t(?:o(?:o(?:l(?:_(?:c(?:a(?:l(?:l>?)?)?)?)?)?)?)?)?$/i)
-                if (partialMatch) {
-                  const safeText = toolBuffer.slice(0, partialMatch.index)
-                  if (safeText.length > 0) {
-                    chunk({ content: safeText })
-                  }
-                  toolBuffer = toolBuffer.slice(partialMatch.index)
-                  break
-                } else {
-                  chunk({ content: toolBuffer })
-                  toolBuffer = ''
-                  break
-                }
-              } else {
-                const preText = toolBuffer.slice(0, startIndex)
-                if (preText.length > 0) {
-                  chunk({ content: preText })
-                }
-                toolBuffer = toolBuffer.slice(startIndex + '<tool_call>'.length)
-                inToolCall = true
-              }
-            }
-
             if (inToolCall) {
               const endIndex = toolBuffer.indexOf('</tool_call>')
               if (endIndex === -1) {
@@ -549,28 +690,84 @@ export function createBridge({ getAccount, wasmPath, log = () => {} }) {
 
               const parsedCalls = parseToolCallJson(jsonStr)
               if (parsedCalls && parsedCalls.length > 0) {
-                for (const call of parsedCalls) {
-                  chunk({
-                    tool_calls: [
-                      {
-                        index: streamedToolCalls++,
-                        id: `call_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`,
-                        type: 'function',
-                        function: {
-                          name: call.name,
-                          arguments: call.arguments,
-                        },
-                      },
-                    ],
-                  })
-                }
-                // Once valid tool call(s) have been emitted, the model's turn is complete!
-                // Abort upstream stream so we don't wait for Google's trailing generation or hit 300s timeout.
+                emitToolCalls(parsedCalls)
                 abort.abort()
                 break
               } else {
                 chunk({ content: `<tool_call>${jsonStr}</tool_call>` })
               }
+              continue
+            }
+
+            if (inRawJsonCall) {
+              const obj = extractFirstJsonObject(toolBuffer, 0)
+              if (!obj || obj.end === -1) {
+                break
+              }
+              const jsonStr = obj.json
+              let endPos = obj.end
+              const post = toolBuffer.slice(endPos)
+              const mdCloseMatch = post.match(/^\s*```/)
+              if (mdCloseMatch) {
+                endPos += mdCloseMatch[0].length
+              }
+              toolBuffer = toolBuffer.slice(endPos)
+              inRawJsonCall = false
+
+              const parsedCalls = parseToolCallJson(jsonStr)
+              if (parsedCalls && parsedCalls.length > 0) {
+                emitToolCalls(parsedCalls)
+                abort.abort()
+                break
+              } else {
+                chunk({ content: jsonStr })
+              }
+              continue
+            }
+
+            const startIndex = toolBuffer.indexOf('<tool_call>')
+            if (startIndex !== -1) {
+              const preText = toolBuffer.slice(0, startIndex)
+              if (preText.length > 0) {
+                chunk({ content: preText })
+              }
+              toolBuffer = toolBuffer.slice(startIndex + '<tool_call>'.length)
+              inToolCall = true
+              continue
+            }
+
+            const rawMatch = toolBuffer.match(/(?:```(?:json)?\s*)?\{\s*"(?:name|tool|function|tool_call)"\s*:/i)
+            if (rawMatch) {
+              const rawIndex = rawMatch.index
+              const preText = toolBuffer.slice(0, rawIndex)
+              if (preText.length > 0) {
+                chunk({ content: preText })
+              }
+              toolBuffer = toolBuffer.slice(rawIndex)
+              const mdOpenMatch = toolBuffer.match(/^```(?:json)?\s*/i)
+              if (mdOpenMatch) {
+                toolBuffer = toolBuffer.slice(mdOpenMatch[0].length)
+              }
+              inRawJsonCall = true
+              continue
+            }
+
+            const partialMatch = toolBuffer.match(/<t(?:o(?:o(?:l(?:_(?:c(?:a(?:l(?:l>?)?)?)?)?)?)?)?)?$/i)
+            const partialRaw = toolBuffer.match(/(?:```(?:json)?\s*)?\{(?:\s*"(?:n(?:a(?:m(?:e"?)?)?)?)?)?$/i)
+            const partialMd = toolBuffer.match(/`{1,3}(?:json)?\s*$/i)
+            const partial = partialMatch || partialRaw || partialMd
+
+            if (partial) {
+              const safeText = toolBuffer.slice(0, partial.index)
+              if (safeText.length > 0) {
+                chunk({ content: safeText })
+              }
+              toolBuffer = toolBuffer.slice(partial.index)
+              break
+            } else {
+              chunk({ content: toolBuffer })
+              toolBuffer = ''
+              break
             }
           }
         }
@@ -588,27 +785,27 @@ export function createBridge({ getAccount, wasmPath, log = () => {} }) {
         if (inToolCall) {
           const parsedCalls = parseToolCallJson(toolBuffer)
           if (parsedCalls && parsedCalls.length > 0) {
-            for (const call of parsedCalls) {
-              chunk({
-                tool_calls: [
-                  {
-                    index: streamedToolCalls++,
-                    id: `call_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`,
-                    type: 'function',
-                    function: {
-                      name: call.name,
-                      arguments: call.arguments,
-                    },
-                  },
-                ],
-              })
-            }
+            emitToolCalls(parsedCalls)
             abort.abort()
           } else {
             chunk({ content: `<tool_call>${toolBuffer}` })
           }
+        } else if (inRawJsonCall) {
+          const parsedCalls = parseToolCallJson(toolBuffer)
+          if (parsedCalls && parsedCalls.length > 0) {
+            emitToolCalls(parsedCalls)
+            abort.abort()
+          } else {
+            chunk({ content: toolBuffer })
+          }
         } else {
-          chunk({ content: toolBuffer })
+          const parsedCalls = parseToolCallJson(toolBuffer)
+          if (parsedCalls && parsedCalls.length > 0) {
+            emitToolCalls(parsedCalls)
+            abort.abort()
+          } else {
+            chunk({ content: toolBuffer })
+          }
         }
       }
 
