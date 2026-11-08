@@ -217,11 +217,11 @@ check('parseToolCallJson repairs unescaped newlines in argument strings',
   parsedMultiline?.[0]?.name === 'shell' && parsedMultiline[0].arguments.includes('import edge_tts'))
 
 // Test auto-normalization of flat tool arguments into nested args container
-const flatOpJson = '{"name": "alaukcut_fazer", "arguments": {"operacao": "criar_animacao_html", "nome": "teste_qc_6s", "html": "<html>hi</html>"}}'
+const flatOpJson = '{"name": "operation_tool", "arguments": {"operacao": "deploy_service", "nome": "auth_service", "config": "port=8080"}}'
 const parsedFlatOp = parseToolCallJson(flatOpJson)
 const flatOpArgs = JSON.parse(parsedFlatOp?.[0]?.arguments ?? '{}')
 check('parseToolCallJson auto-normalizes flat operation arguments into nested args',
-  flatOpArgs.operacao === 'criar_animacao_html' && flatOpArgs.args?.nome === 'teste_qc_6s' && flatOpArgs.args?.html === '<html>hi</html>')
+  flatOpArgs.operacao === 'deploy_service' && flatOpArgs.args?.nome === 'auth_service' && flatOpArgs.args?.config === 'port=8080')
 
 // Test normalization of execute tool code argument
 const executeFallbackJson = '{"name": "execute", "arguments": {"command": "console.log(42)"}}'

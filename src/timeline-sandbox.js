@@ -2,8 +2,8 @@
  * timeline-sandbox.js — Pillar 3: Sandbox DOM & In-Memory Simulation
  *
  * Implements VirtualTimeline: an in-memory, deterministic simulator for
- * AlaukCut and Remotion timelines. Validates batch operations (montar_timeline,
- * adding clips, transitions, stickers, audio) before touching the physical projeto.json.
+ * media and sequence timelines. Validates batch operations (timeline assembly,
+ * adding tracks, transitions, audio) before touching persistent project state.
  *
  * Guarantees:
  *   1. Track collision prevention: no two clips accidentally overlap on the same track.

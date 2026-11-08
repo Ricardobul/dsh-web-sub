@@ -2,74 +2,117 @@
 
 [![Version](https://img.shields.io/badge/version-0.8.0-blue.svg)](package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-DeepSeek%20Harness%20(DSH)%20%7C%20OpenCode-purple.svg)](https://github.com/deepseek-ai/dsh)
+[![Platform](https://img.shields.io/badge/platform-OpenCode%20%7C%20DSH%20%7C%20Cursor%20%7C%20Claude%20Code-purple.svg)](https://github.com/deepseek-ai/dsh)
 [![ChatGPT](https://img.shields.io/badge/ChatGPT-Codex%20OAuth%20integrated-10a37f.svg)](https://chatgpt.com)
-[![Visual QC](https://img.shields.io/badge/Visual%20QC-watch--skill%20integrated-indigo.svg)](https://github.com/Ricardobul/dsh-web-sub)
+[![OpenAI Compatible](https://img.shields.io/badge/API-OpenAI%20Compatible%20Bridge-darkgreen.svg)](http://127.0.0.1:18431/v1)
 
-**dsh-web-sub** seamlessly bridges your **Gemini**, **ChatGPT**, and **DeepSeek** web subscriptions into [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/dsh) and [OpenCode Desktop](https://opencode.ai) as native models. Enjoy **GPT-5.6 Luna, GPT-6 Luna, GPT-6 Astra, Gemini 4 Argon, Gemini 3.8 Flash**, and **DeepSeek Chat & DeepThink** with zero API key costs, infinite iteration, and automatic session upkeep.
+**dsh-web-sub** is a lightweight local bridge and plugin that connects your **Gemini**, **ChatGPT**, and **DeepSeek** web subscriptions directly into your local coding environments, IDEs, and AI agents as native models.
 
-Starting in **v0.8.0**, `dsh-web-sub` introduces:
-- **First-Class ChatGPT Subscription Support**: Connects directly to the official ChatGPT Codex subscription backend via OAuth 2.0 PKCE (`~/.codex/auth.json` or `dsh-web-sub login chatgpt`), giving you access to OpenAI's flagship models (`gpt-5.6-luna`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-6-astra`).
-- **Resilient JSON Tool Call Sanitizer**: Automatically cleans and repairs unescaped Windows paths (`D:\...`), invalid JSON escapes, literal linebreaks in arguments, and trailing commas emitted by LLMs, eliminating tool call leaks in chat.
-- **Universal Multi-Host Compatibility**: Fully supports both **DeepSeek Harness (DSH)** via Cordis RPC routes and **OpenCode Desktop / Claude Code** via the local OpenAI-compatible bridge on `http://127.0.0.1:18431/v1`.
+Access **GPT-5.6 Luna, GPT-6 Luna, GPT-6 Astra, Gemini 4 Argon, Gemini 3.8 Flash**, and **DeepSeek Chat & DeepThink (R1)** with **zero paid API key costs**, unlimited iteration, and automatic session upkeep.
+
+---
+
+## Where Can It Be Used? (Supported Environments)
+
+`dsh-web-sub` runs a standard, local OpenAI-compatible HTTP server on `http://127.0.0.1:18431/v1` and integrates with:
+
+1. **OpenCode Desktop & OpenCode CLI**:
+   - Point your OpenCode configuration to `http://127.0.0.1:18431/v1` using provider `openai` or custom bridge.
+   - Run autonomous multi-turn coding agent loops.
+
+2. **DeepSeek Harness (DSH)**:
+   - Native integration via Cordis patch. Configure models directly in **Settings → Models** and manage sessions in **Plugins → Web Chat Subscription**.
+
+3. **VS Code AI Extensions & Coding Agents**:
+   - **Claude Code**: Set OpenAI base URL to `http://127.0.0.1:18431/v1`.
+   - **Cline / Roo Code**: Add an OpenAI-compatible provider with base URL `http://127.0.0.1:18431/v1`.
+   - **Cursor**: Configure Custom OpenAI Provider endpoint with URL `http://127.0.0.1:18431/v1`.
+   - **Continue.dev**: Add an OpenAI provider entry in `config.json`.
+   - **Windsurf / Aider**: Direct API target for automated refactoring.
+
+4. **Self-Hosted Chat Interfaces**:
+   - Compatible with **LibreChat**, **Chatbox**, **NextChat**, and **Open WebUI** for general technical inquiry and pair programming.
+
+---
+
+## What Is It Used For? (Ideal Use Cases)
+
+`dsh-web-sub` is specifically engineered for **software development, code automation, and technical workflows**:
+
+* **Full-Stack Software Development**:
+  - Writing, refactoring, and reviewing code in TypeScript, JavaScript, Python, Go, Rust, C++, Java, PHP, and SQL.
+  - Designing RESTful APIs, GraphQL schemas, database migrations, and microservices.
+  - Generating frontend components (React, Vue, Svelte, Tailwind CSS).
+
+* **Autonomous Coding Agent Workflows**:
+  - Multi-turn file reading, editing, and directory exploration.
+  - Running unit tests, reading terminal outputs, and automatically self-healing failing test suites.
+  - Generating documentation, changelogs, and READMEs directly from codebases.
+
+* **Deep Algorithmic & Mathematical Reasoning**:
+  - Complex architectural problem solving with **DeepSeek DeepThink (R1)** and **Gemini Extended Thinking**.
+  - Debugging concurrency issues, race conditions, memory leaks, and complex logic puzzles.
+
+* **DevOps & Scripting**:
+  - Writing shell scripts (Bash, PowerShell), Dockerfiles, and CI/CD workflows (GitHub Actions, GitLab CI).
+  - Infrastructure configuration (Terraform, Kubernetes YAML, Nginx configs).
+
+* **Zero Token Cost Pair Programming**:
+  - Eliminate API billing anxiety during long refactoring sessions or exploratory programming by utilizing your existing consumer web subscriptions.
 
 ---
 
 ## Key Features
 
-- **Zero-Cost Web Sessions**: Harness consumer web models without paid API keys, credit cards, or token metering.
+- **Zero-Cost Web Sessions**: Harness consumer web models without pay-per-token API metering.
 - **Full Model Lineup**:
   - **ChatGPT**: GPT-5.6 Luna, GPT-6 Luna, GPT-5.6 Sol, GPT-6 Astra, GPT-5.3 Codex Spark (with reasoning and native tool streaming).
   - **Gemini**: Gemini 4 Argon, Gemini 3.8 Flash, Gemini 3.1 Pro (with standard and extended thinking).
   - **DeepSeek**: DeepSeek Web (Chat) and DeepSeek Web (DeepThink reasoning).
-- **Bulletproof Tool Execution**:
+- **Bulletproof Tool Execution Engine**:
   - Intercepts synthetic `<tool_call>` tags and raw JSON tool calls.
-  - Sanitizes invalid escapes and Windows file paths in shell commands before JSON parsing.
-  - Inoculates models against API key hunting and refusal filters.
-- **Redesigned Modern UI**:
-  - Polished dark glassmorphic card design matching DeepSeek Harness desktop theme.
-  - Generic **"Abrir browser"** button for universal browser synchronization.
-  - Interactive model badges, real-time bridge indicators, and live status bars.
-- **Native Visual QC & Motion Graphics Engine**:
-  - Directly exposes `auditar_video` tool and `dsh-web-sub audit` CLI command.
-  - Validates Safe-Area compliance (9:16 vertical 880px central column, 16:9 horizontal, 4:5 social).
-  - Inspects text collision, safe margins, and video stream integrity.
+  - **Auto-Healing JSON Parser**: Sanitizes unescaped Windows file paths (`D:\...`), invalid escape characters, trailing commas, and raw line breaks in code arguments.
+  - **Auto-Normalizing Tool Arguments**: Automatically adapts flat operation parameters into expected nested container structures.
+  - **Sandboxed Code Support**: Maps and repairs JavaScript/Python `code` parameters for agentic code-runners.
 - **Self-Healing Session Layer**:
   - Automatic PKCE OAuth token refresh for ChatGPT via `auth.openai.com`.
   - Automatically recovers and rotates Google `__Secure-1PSID` / `__Secure-1PSIDTS` cookies and CSRF tokens.
   - Handles client-side WebAssembly Proof-of-Work (PoW) computation for DeepSeek.
+- **Compact Context Management**:
+  - Intelligently compacts older tool outputs and past turn code blocks to keep conversations within web session boundaries and prevent session rejection.
 
 ---
 
-## Architecture Overview
+## Quick Start & Installation
 
+### Option A: OpenCode / Cursor / Cline / Claude Code (Standalone Bridge)
+
+1. Start the local bridge server:
+```bash
+npx dsh-web-sub serve
+# or if installed globally:
+dsh-web-sub serve
 ```
- ┌─────────────────────────────────────────────────────────┐
- │               DeepSeek Harness (DSH) Web UI            │
- └─────────────┬─────────────────────────────▲─────────────┘
-               │ HTTP / JSON                 │ SSE Stream
-               ▼                             │
- ┌─────────────────────────────────────────────────────────┐
- │         dsh-web-sub Local Bridge (127.0.0.1:18431)       │
- ├─────────────────────────────┬───────────────────────────┤
- │  • OpenAI-Compatible Proxy  │  • Visual QC Engine       │
- │  • Synthetic Tool Invoker   │  • Safe-Area 9:16 Checker │
- │  • Auto PoW (WebAssembly)   │  • watch-skill Runner     │
- └─────────────┬───────────────┴─────────────▲─────────────┘
-               │ Web RPC                     │
-               ▼                             │
-     ┌──────────────────┐          ┌──────────────────┐
-     │  chat.deepseek   │          │  gemini.google   │
-     │  (Session Web)   │          │  (Argon / Flash) │
-     └──────────────────┘          └──────────────────┘
+The bridge listens on `http://127.0.0.1:18431/v1`.
+
+2. Login to your providers:
+```bash
+# Login via browser synchronization
+dsh-web-sub login gemini-web
+dsh-web-sub login deepseek-web
+dsh-web-sub login chatgpt
 ```
+
+3. In your coding tool (OpenCode, Cline, Cursor), set:
+- **Base URL**: `http://127.0.0.1:18431/v1`
+- **API Key**: `any-key` (the bridge validates via your local authenticated session)
+- **Model**: e.g., `gemini-4-argon`, `gpt-5.6-luna`, or `deepseek-chat`
 
 ---
 
-## Installation
+### Option B: DeepSeek Harness (DSH Desktop)
 
-### 1. Place in your DSH profile
-Copy the package into your DSH desktop profile's `node_modules`:
+1. Place the package into your DSH desktop profile:
 ```bash
 # Windows
 C:\Users\<user>\.dsh\profiles\desktop\node_modules\dsh-web-sub
@@ -78,73 +121,20 @@ C:\Users\<user>\.dsh\profiles\desktop\node_modules\dsh-web-sub
 ~/.dsh/profiles/desktop/node_modules/dsh-web-sub
 ```
 
-### 2. Register in `cordis.patch.yml`
-Add the plugin row inside your profile's `cordis.patch.yml`:
+2. Add to `cordis.patch.yml`:
 ```yaml
 - insert:
     - id: web-subscription
       name: 'dsh-web-sub'
 ```
 
-### 3. Restart DSH
-Launch DeepSeek Harness. The models will appear under **Settings → Models** and the configuration card is available under **Plugins → Web Chat Subscription**.
-
----
-
-## Account Connection
-
-### One-Click Browser Sync (Recommended)
-1. Navigate to **Plugins → Web Chat Subscription**.
-2. Click **"Abrir browser"** under the desired provider.
-3. Sign in to your account. The plugin automatically detects and stores the session token/cookies securely in `~/.dsh/dsh-web-sub/accounts.json` (`0600` permissions).
-
-### Manual Paste
-Expand **"Inserir credenciais manualmente"**:
-- **DeepSeek**: Paste `localStorage.userToken` extracted from `chat.deepseek.com`.
-- **Gemini**: Paste the `Cookie` header from `gemini.google.com` (specifically `__Secure-1PSID`).
-
----
-
-## Motion Graphics Visual QC (`auditar_video`)
-
-When creating motion graphics with **Gemini 4 Argon** in DSH (via HyperFrames, Canvas 2D, or Remotion), the model can autonomously audit its output before presenting it:
-
-```json
-{
-  "name": "auditar_video",
-  "arguments": {
-    "caminho_video": "renders/take_01.mp4",
-    "formato": "9:16",
-    "criterios": "Verify 880px safe column and text clearance"
-  }
-}
-```
-
-The plugin analyzes the file and returns a structured QC report:
-```json
-{
-  "ok": true,
-  "approved": true,
-  "score": 98,
-  "aspectRatio": "9:16",
-  "safeArea": {
-    "columnWidthPx": 880,
-    "topMarginPx": 180,
-    "bottomMarginPx": 240
-  },
-  "findings": [
-    { "check": "File Integrity", "status": "PASSED" },
-    { "check": "Safe-Area Layout", "status": "PASSED", "details": "Content restricted to 880px safe column." },
-    { "check": "Readability & Edge Collision", "status": "PASSED" }
-  ]
-}
-```
+3. Restart DSH. Manage models in **Settings → Models** and sign in via **Plugins → Web Chat Subscription**.
 
 ---
 
 ## CLI Reference
 
-The built-in CLI (`dsh-web-sub`) allows full headless management and CI/CD verification:
+The built-in CLI (`dsh-web-sub`) allows full headless management and scripting:
 
 ```bash
 # Check status and connected providers
@@ -153,77 +143,61 @@ dsh-web-sub status
 # Authenticate via browser
 dsh-web-sub login deepseek-web
 dsh-web-sub login gemini-web
+dsh-web-sub login chatgpt
 
 # Inspect available models
 dsh-web-sub models gemini-web
+dsh-web-sub models chatgpt
 
-# Run automated Visual QC on a video
-dsh-web-sub audit take_01.mp4 --ratio 9:16 --safeArea 880
-
-# Check Visual QC engine status (watch-skill)
-dsh-web-sub qc
-
-# Run standalone bridge server
+# Run standalone bridge server (for OpenCode / Cline / Cursor)
 dsh-web-sub serve
 
 # End-to-end smoke test
-dsh-web-sub chat gemini-web "Write a quick motion graphics plan"
+dsh-web-sub chat gemini-web "Write a TypeScript function to debounce an async callback"
 ```
 
 ---
 
-## Technical Notes
+## Architecture Overview
 
-- **Proof-of-Work (PoW)**: DeepSeek requires a cryptographic challenge per message. The included `sha3_wasm_bg.wasm` computes this via Node's native WebAssembly engine without external binaries.
-- **Gemini Batchexecute RPC**: Communicates directly through Google's internal `StreamGenerate` protocol. Header limits are raised to `256 KB` (`maxHeaderSize`) to avoid `UND_ERR_HEADERS_OVERFLOW`.
-- **Streaming & Tool Calling**: OpenAI message streams are converted into tagged turns (`[SYSTEM INSTRUCTIONS]`, `[USER]`, `[ASSISTANT]`). Synthetic `<tool_call>` tags are intercepted and emitted as native OpenAI streaming `tool_calls`.
+```
+ ┌─────────────────────────────────────────────────────────────────┐
+ │   Coding Environments & Agents (OpenCode, DSH, Cline, Cursor)  │
+ └───────────────────────────────┬─────────────────────────────────┘
+                                 │ HTTP / JSON & SSE Stream
+                                 ▼
+ ┌─────────────────────────────────────────────────────────────────┐
+ │            dsh-web-sub Local Bridge (127.0.0.1:18431)           │
+ ├───────────────────────────────┬─────────────────────────────────┤
+ │ • OpenAI-Compatible /v1 API   │ • Auto-Healing JSON Tool Parser │
+ │ • PKCE OAuth & Session Kept   │ • WebAssembly PoW Solver (SHA3) │
+ └───────┬───────────────────────┴─────────────────┬───────────────┘
+         │ Web Session Protocol                    │ Web Session Protocol
+         ▼                                         ▼
+ ┌───────────────────────────────┐         ┌───────────────────────┐
+ │        chat.deepseek.com      │         │    gemini.google.com  │
+ │  (DeepSeek Chat & DeepThink)  │         │   (Argon / Flash API) │
+ └───────────────────────────────┘         └───────────────────────┘
+```
 
 ---
 
-## Extensible Middleware & Hooks Architecture
+## Extensible Middleware & Hooks
 
-`dsh-web-sub` includes a zero-dependency, pluggable middleware engine allowing developers to hook into the request/response pipeline. You can inject custom prompt grounding, integrate local intent routers (such as ONNX classifiers, Ollama, or local SLMs), or build fast-path execution layers without modifying the core repository.
-
-### Creating a Custom Middleware
-Place a `middleware.mjs` (or `.js`) file in your data directory (`~/.dsh/dsh-web-sub/middleware.mjs`) or set the `DSH_WEB_SUB_MIDDLEWARE` environment variable:
+`dsh-web-sub` includes a zero-dependency middleware engine allowing developers to hook into the request/response pipeline. You can inject custom prompt grounding, integrate local intent routers (such as ONNX classifiers, Ollama, or local SLMs), or build fast-path execution layers:
 
 ```javascript
 // ~/.dsh/dsh-web-sub/middleware.mjs
 
-/**
- * Intercept and enrich requests before they are sent upstream.
- */
 export async function onRequest({ model, messages, tools, stream, body }) {
-  // Example: Inject custom project guidance or task constraints
-  const lastMessage = messages[messages.length - 1];
-  
-  // Fast-path: Return an immediate answer or pre-computed tool call
-  // if (shouldHandleLocally(lastMessage)) {
-  //   return { handled: true, response: { choices: [{ message: { role: 'assistant', content: 'Local response' } }] } };
-  // }
-
+  // Inject project-specific coding guidelines or instructions
   return { messages, tools };
 }
 
-/**
- * Post-process completions or tool calls before returning to the client.
- */
 export async function onResponse({ model, content, toolCalls, reasoning }) {
-  // Example: Audit or log responses
   return { content, toolCalls };
 }
 ```
-
----
-
-## Universal OpenAI Tool Calling & Agentic Recovery
-
-Starting in **v0.7.3**, `dsh-web-sub` features an enterprise-grade synthetic tool-calling engine designed for coding agents (**OpenCode Desktop**, **DeepSeek Harness**, **Claude Code**, **Cursor**, etc.):
-
-- **Universal Interception**: Intercepts both `<tool_call>` XML blocks and raw JSON function invocations (`{"name": "...", "arguments": ...}`) across both streaming (SSE) and non-streaming requests.
-- **Auto-Healing Parser**: Tolerates trailing commas, unescaped whitespace, markdown codeblock wraps, and raw single objects or arrays.
-- **Anti-Refusal Inoculation**: Directs web models to operate with local agent tools without hallucinating requirements for external cloud API keys (e.g. `GEMINI_API_KEY`).
-- **Error Recovery Loop**: When client agents return execution errors or invalid tool arguments, hints are automatically appended to prompt the model to self-correct rather than giving up with canned refusals.
 
 ---
 
