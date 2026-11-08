@@ -216,6 +216,20 @@ const parsedMultiline = parseToolCallJson(multilineToolJson)
 check('parseToolCallJson repairs unescaped newlines in argument strings',
   parsedMultiline?.[0]?.name === 'shell' && parsedMultiline[0].arguments.includes('import edge_tts'))
 
+// Test auto-normalization of flat tool arguments into nested args container
+const flatOpJson = '{"name": "alaukcut_fazer", "arguments": {"operacao": "criar_animacao_html", "nome": "teste_qc_6s", "html": "<html>hi</html>"}}'
+const parsedFlatOp = parseToolCallJson(flatOpJson)
+const flatOpArgs = JSON.parse(parsedFlatOp?.[0]?.arguments ?? '{}')
+check('parseToolCallJson auto-normalizes flat operation arguments into nested args',
+  flatOpArgs.operacao === 'criar_animacao_html' && flatOpArgs.args?.nome === 'teste_qc_6s' && flatOpArgs.args?.html === '<html>hi</html>')
+
+// Test normalization of execute tool code argument
+const executeFallbackJson = '{"name": "execute", "arguments": {"command": "console.log(42)"}}'
+const parsedExecute = parseToolCallJson(executeFallbackJson)
+const executeArgs = JSON.parse(parsedExecute?.[0]?.arguments ?? '{}')
+check('parseToolCallJson auto-maps command to code for execute tool',
+  executeArgs.code === 'console.log(42)')
+
 // ---------- 3d. middleware engine ----------
 const { MiddlewareEngine } = await load('middleware.js')
 console.log('\n3d. middleware engine')
