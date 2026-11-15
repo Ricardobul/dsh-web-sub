@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-sub",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Local OpenAI-compatible bridge & plugin connecting your Gemini, ChatGPT, and DeepSeek web subscriptions to OpenCode Desktop, DeepSeek Harness (DSH), Claude Code, Cline, Cursor, and Continue. Enjoy zero-token-cost development, resilient JSON tool call repair, PKCE OAuth for ChatGPT, and deep reasoning models for software engineering.",
   "keywords": [
     "deepseek-harness",

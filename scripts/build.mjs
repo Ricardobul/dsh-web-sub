@@ -53,11 +53,11 @@ mkdirSync(join(root, 'locale'), { recursive: true })
 const locales = {
   en: {
     title: 'Web Chat Subscription',
-    description: 'Bind your chat.deepseek.com and gemini.google.com sessions to use those models inside DSH.',
+    description: 'Bind your DeepSeek, Gemini, and ChatGPT sessions to use those models inside DSH.',
   },
   pt: {
     title: 'Assinatura Web Chat',
-    description: 'Conecte suas sessões do chat.deepseek.com e do gemini.google.com para usar esses modelos dentro do DSH.',
+    description: 'Conecte suas sessões do chat.deepseek.com, gemini.google.com e chatgpt.com para usar esses modelos dentro do DSH.',
   },
 }
 for (const [language, dictionary] of Object.entries(locales)) {

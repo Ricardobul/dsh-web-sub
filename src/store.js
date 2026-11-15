@@ -85,11 +85,14 @@ export function maskAccount(record) {
     label: record.label ?? null,
     source: safeSource,
     updatedAt: record.updatedAt ?? null,
-    tokenPreview: mask(record.token),
+    tokenPreview: mask(record.token || record.accessToken),
     cookiePreview: mask(record.cookie),
-    hasToken: typeof record.token === 'string' && record.token !== '',
+    hasToken: Boolean((typeof record.token === 'string' && record.token !== '') || (typeof record.accessToken === 'string' && record.accessToken !== '')),
     hasCookie: typeof record.cookie === 'string' && record.cookie !== '',
-    models: Array.isArray(record.models) ? record.models.map((model) => model.displayName || model.modelName || model.modelId) : [],
+    planType: record.planType ?? null,
+    expiresAt: record.expiresAt ?? null,
+    email: record.email ?? null,
+    models: Array.isArray(record.models) ? record.models.map((model) => model.displayName || model.modelName || model.modelId || model.id) : [],
   }
 }
 
