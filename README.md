@@ -1,6 +1,6 @@
 # dsh-web-sub
 
-[![Version](https://img.shields.io/badge/version-0.8.0-blue.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-0.8.3-blue.svg)](package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-OpenCode%20%7C%20DSH%20%7C%20Cursor%20%7C%20Claude%20Code-purple.svg)](https://github.com/deepseek-ai/dsh)
 [![ChatGPT](https://img.shields.io/badge/ChatGPT-Codex%20OAuth%20integrated-10a37f.svg)](https://chatgpt.com)

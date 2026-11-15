@@ -49,12 +49,11 @@
     "selftest": "node tests/selftest.mjs"
   },
   "dsh": {
+    "client": {
+      "platform": "web"
+    },
     "bundle": {
       "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "platform": "web",
-      "inject": []
     }
   },
   "peerDependencies": {
