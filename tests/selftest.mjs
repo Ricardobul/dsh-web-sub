@@ -391,6 +391,57 @@ console.log('\n7. chatgpt / openai codex subscription')
     decodedPayload?.email === 'test@example.com' && decodedPayload?.exp === 1890000000)
 }
 
+// ---------- 8. Multimodal Images, Generated Assets & Resilience ----------
+console.log('\n8. multimodal images, generated assets & resilience')
+{
+  const { ChatGPTWebClient } = await load(join('providers', 'chatgpt.js'))
+  const { extractGeminiGeneratedImages } = await load(join('providers', 'gemini.js'))
+  const { DeepSeekWebClient } = await load(join('providers', 'deepseek.js'))
+  const { parseToolCallJson, sanitizeJsonString } = await load('server.js')
+
+  // 1. ChatGPT Multimodal formatting
+  const chatgpt = new ChatGPTWebClient()
+  const multimodalPayload = chatgpt.formatPayload([
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Analise esta imagem' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY44YAAAAASUVORK5CYII=' } },
+      ],
+    },
+  ])
+  const userMsg = multimodalPayload.input.find((i) => i.role === 'user')
+  check('chatgpt formatPayload preserves multimodal parts (input_text + input_image)',
+    Array.isArray(userMsg?.content) &&
+    userMsg.content.some((p) => p.type === 'input_text' && p.text === 'Analise esta imagem') &&
+    userMsg.content.some((p) => p.type === 'input_image' && p.image_url.startsWith('data:image/png;base64,')))
+
+  // 2. Gemini generated image extraction
+  const mockCandidate = [
+    null,
+    ['Aqui está a sua imagem renderizada:'],
+    null,
+    null,
+    [['https://lh3.googleusercontent.com/gg-img/sample123', 'Generated Image']],
+  ]
+  const extractedImages = extractGeminiGeneratedImages(mockCandidate)
+  check('extractGeminiGeneratedImages extracts Imagen 3 candidate URLs',
+    extractedImages.length === 1 && extractedImages[0] === 'https://lh3.googleusercontent.com/gg-img/sample123')
+
+  // 3. DeepSeek Web uploadFile interface
+  check('DeepSeekWebClient defines uploadFile for multimodal ref_file_ids',
+    typeof DeepSeekWebClient.prototype.uploadFile === 'function')
+
+  // 4. JSON auto-healing resilience
+  const healedTrailingCommas = parseToolCallJson('{"name": "test_tool", "arguments": {"param": "val", }}')
+  check('parseToolCallJson repairs trailing commas in arguments',
+    healedTrailingCommas && healedTrailingCommas[0].name === 'test_tool')
+
+  const healedWindowsPath = parseToolCallJson('{"name": "auditar_video", "arguments": {"caminho_video": "C:\\videos\\output.mp4"}}')
+  check('parseToolCallJson repairs unescaped Windows backslashes in paths',
+    healedWindowsPath && healedWindowsPath[0].name === 'auditar_video')
+}
+
 console.log('')
 if (failures === 0) {
   console.log('all checks passed')
